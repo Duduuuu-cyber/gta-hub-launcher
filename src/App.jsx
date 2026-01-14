@@ -6,6 +6,7 @@ import TitleBar from './components/TitleBar'
 import Home from './pages/Home'
 import Settings from './pages/Settings'
 import SplashScreen from './components/SplashScreen'
+import FirstRunWizard from './components/FirstRunWizard'
 
 const Sidebar = () => {
   const location = useLocation();
@@ -37,11 +38,26 @@ const Sidebar = () => {
 
 function App() {
   const [loading, setLoading] = useState(true);
+  const [needsSetup, setNeedsSetup] = useState(false);
+
+  useEffect(() => {
+    const checkSetup = async () => {
+      const path = localStorage.getItem('gtapath');
+      if (!path) setNeedsSetup(true);
+    };
+    checkSetup();
+  }, []);
+
+  const handleSetupComplete = () => {
+    setNeedsSetup(false);
+  };
 
   return (
     <AnimatePresence mode="wait">
       {loading ? (
         <SplashScreen key="splash" onComplete={() => setLoading(false)} />
+      ) : needsSetup ? (
+        <FirstRunWizard key="wizard" onComplete={handleSetupComplete} />
       ) : (
         <div className="app-container">
           <TitleBar />

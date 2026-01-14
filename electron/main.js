@@ -8,6 +8,9 @@ import dgram from 'dgram'
 import pkg from 'electron-updater'
 const { autoUpdater } = pkg
 import { exec } from 'child_process'
+import fs from 'fs'
+import https from 'https'
+import AdmZip from 'adm-zip'
 
 process.env.DIST = join(__dirname, '../dist_build')
 process.env.PUBLIC = app.isPackaged ? process.env.DIST : join(__dirname, '../public')
@@ -245,4 +248,66 @@ app.whenReady().then(() => {
             shell.openExternal(url);
         }
     })
+
+    // --- First Run Wizard IPC ---
+
+    // Check if game exists in a specific path
+    ipcMain.handle('check-game-files', async (event, pathToCheck) => {
+        try {
+            const exePath = join(pathToCheck, 'gta_sa.exe');
+            // Basic check: just see if exe exists
+            if (fs.existsSync(exePath)) {
+                return true;
+            }
+            return false;
+        } catch (e) {
+            return false;
+        }
+    })
+
+    // Download Game
+    ipcMain.on('download-game-start', (event, url, targetPath) => {
+        const file = fs.createWriteStream(targetPath);
+
+        https.get(url, (response) => {
+            const total = parseInt(response.headers['content-length'], 10);
+            let cur = 0;
+
+            response.on('data', (chunk) => {
+                cur += chunk.length;
+                file.write(chunk);
+                // Send progress (0-100)
+                const percent = (cur / total) * 100;
+                event.sender.send('download-progress', percent);
+            });
+
+            response.on('end', () => {
+                file.close();
+                event.sender.send('download-complete', targetPath);
+            });
+        }).on('error', (err) => {
+            fs.unlink(targetPath, () => { }); // Delete partial file
+            event.sender.send('download-error', err.message);
+        });
+    });
+
+    // Extract Game
+    ipcMain.handle('extract-game', async (event, zipPath, targetDir) => {
+        try {
+            const zip = new AdmZip(zipPath);
+            zip.extractAllTo(targetDir, true);
+            // Cleanup zip
+            fs.unlinkSync(zipPath);
+            return { success: true };
+        } catch (e) {
+            console.error(e);
+            return { success: false, error: e.message };
+        }
+    });
+
+    // Get App Path (to know where to install if "default")
+    ipcMain.handle('get-app-path', () => {
+        // Use userData or a specific folder next to executable
+        return app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath();
+    });
 })

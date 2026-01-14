@@ -44,6 +44,7 @@
     "electron:build": "vite build && electron-builder"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "electron-updater": "^6.7.3",
     "framer-motion": "^10.18.0",
     "lucide-react": "^0.309.0",
