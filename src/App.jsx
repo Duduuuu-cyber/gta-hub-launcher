@@ -42,13 +42,23 @@ function App() {
 
   useEffect(() => {
     const checkSetup = async () => {
-      const path = localStorage.getItem('gtapath');
+      let path = localStorage.getItem('gtapath');
+
+      // 1. If path is stored, verify it acts like a valid game folder
+      if (path) {
+        const isValid = await ipcRenderer.invoke('check-game-files', path);
+        if (!isValid) {
+          console.log('Ruta guardada inválida. Reseteando...');
+          localStorage.removeItem('gtapath');
+          path = null;
+        }
+      }
+
+      // 2. Decide next step
       if (path) {
         setNeedsSetup(false);
       } else {
-        // Not configured? Let's check if we are already inside the game folder!
-        // We will call the new IPC handler: 'check-local-game'
-        // If it returns a path, use it. If null, show wizard.
+        // Not configured or invalid? Check local dir (Auto-Detect)
         const localPath = await ipcRenderer.invoke('check-local-game');
         if (localPath) {
           localStorage.setItem('gtapath', localPath);
