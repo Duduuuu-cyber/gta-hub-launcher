@@ -17085,22 +17085,31 @@ require$$1$2.app.whenReady().then(() => {
     return true;
   });
   require$$1$2.ipcMain.handle("check-game-files", async (event, pathToCheck) => {
+    console.log("[DEBUG] Checking game files in:", pathToCheck);
     try {
       const exePath = require$$1.join(pathToCheck, "gta_sa.exe");
-      return fs$j.existsSync(exePath);
+      const exists = fs$j.existsSync(exePath);
+      console.log("[DEBUG] gta_sa.exe exists?", exists);
+      return exists;
     } catch (e) {
+      console.error("[DEBUG] Error checking game files:", e);
       return false;
     }
   });
   require$$1$2.ipcMain.handle("check-local-game", async () => {
+    console.log("[DEBUG] Starting Auto-detect check...");
     try {
       let appDir = require$$1$2.app.isPackaged ? require$$1.dirname(require$$1$2.app.getPath("exe")) : require$$1$2.app.getAppPath();
+      console.log("[DEBUG] App Dir:", appDir);
       const exePath = require$$1.join(appDir, "gta_sa.exe");
-      if (fs$j.existsSync(exePath)) {
+      const exists = fs$j.existsSync(exePath);
+      console.log("[DEBUG] Local gta_sa.exe found?", exists);
+      if (exists) {
         return appDir;
       }
       return null;
     } catch (e) {
+      console.error("[DEBUG] Auto-detect error:", e);
       return null;
     }
   });

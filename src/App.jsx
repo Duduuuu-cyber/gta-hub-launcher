@@ -8,6 +8,8 @@ import Settings from './pages/Settings'
 import SplashScreen from './components/SplashScreen'
 import FirstRunWizard from './components/FirstRunWizard'
 
+const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: { invoke: () => Promise.resolve(null) } };
+
 const Sidebar = () => {
   const location = useLocation();
 
@@ -43,12 +45,14 @@ function App() {
   useEffect(() => {
     const checkSetup = async () => {
       let path = localStorage.getItem('gtapath');
+      console.log('[DEBUG-RENDERER] Start Check. Stored path:', path);
 
       // 1. If path is stored, verify it acts like a valid game folder
       if (path) {
         const isValid = await ipcRenderer.invoke('check-game-files', path);
+        console.log('[DEBUG-RENDERER] Path validation result:', isValid);
         if (!isValid) {
-          console.log('Ruta guardada inválida. Reseteando...');
+          console.log('[DEBUG-RENDERER] Ruta guardada inválida. Reseteando...');
           localStorage.removeItem('gtapath');
           path = null;
         }
@@ -56,14 +60,19 @@ function App() {
 
       // 2. Decide next step
       if (path) {
+        console.log('[DEBUG-RENDERER] Setup OK. Path:', path);
         setNeedsSetup(false);
       } else {
         // Not configured or invalid? Check local dir (Auto-Detect)
+        console.log('[DEBUG-RENDERER] Checking local auto-detect...');
         const localPath = await ipcRenderer.invoke('check-local-game');
+        console.log('[DEBUG-RENDERER] Auto-detect found:', localPath);
+
         if (localPath) {
           localStorage.setItem('gtapath', localPath);
           setNeedsSetup(false);
         } else {
+          console.log('[DEBUG-RENDERER] SETTING NEEDS SETUP TO TRUE');
           setNeedsSetup(true);
         }
       }

@@ -271,27 +271,36 @@ app.whenReady().then(() => {
 
     // Check if game exists in a specific path
     ipcMain.handle('check-game-files', async (event, pathToCheck) => {
+        console.log('[DEBUG] Checking game files in:', pathToCheck);
         try {
             const exePath = join(pathToCheck, 'gta_sa.exe');
-            return fs.existsSync(exePath);
+            const exists = fs.existsSync(exePath);
+            console.log('[DEBUG] gta_sa.exe exists?', exists);
+            return exists;
         } catch (e) {
+            console.error('[DEBUG] Error checking game files:', e);
             return false;
         }
     })
 
     // Check if game exists in THE LAUNCHER'S OWN DIRECTORY (Auto-detect)
     ipcMain.handle('check-local-game', async () => {
+        console.log('[DEBUG] Starting Auto-detect check...');
         try {
             // Check where the app is running
             let appDir = app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath();
-            // In dev, getAppPath usually points to src/..
-            // If user puts launcher in GTA folder, exe is next to gta_sa.exe
+            console.log('[DEBUG] App Dir:', appDir);
+
             const exePath = join(appDir, 'gta_sa.exe');
-            if (fs.existsSync(exePath)) {
+            const exists = fs.existsSync(exePath);
+            console.log('[DEBUG] Local gta_sa.exe found?', exists);
+
+            if (exists) {
                 return appDir;
             }
             return null;
         } catch (e) {
+            console.error('[DEBUG] Auto-detect error:', e);
             return null;
         }
     });
