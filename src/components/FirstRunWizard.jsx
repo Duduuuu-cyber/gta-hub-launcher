@@ -91,10 +91,10 @@ const FirstRunWizard = ({ onComplete }) => {
                             <p>No detectamos una instalación de GTA San Andreas vinculada.</p>
                         </div>
 
-                        <div className="options-grid">
+                        <div className="options-container">
                             <motion.button
                                 className="option-card download"
-                                whileHover={{ scale: 1.02, borderColor: "rgba(59, 130, 246, 0.5)" }}
+                                whileHover={{ scale: 1.02, y: -2 }}
                                 whileTap={{ scale: 0.98 }}
                                 onClick={handleDownload}
                             >
@@ -109,7 +109,7 @@ const FirstRunWizard = ({ onComplete }) => {
 
                             <motion.button
                                 className="option-card locate"
-                                whileHover={{ scale: 1.02, borderColor: "rgba(16, 185, 129, 0.5)" }}
+                                whileHover={{ scale: 1.02, y: -2 }}
                                 whileTap={{ scale: 0.98 }}
                                 onClick={handleLocate}
                             >
@@ -178,12 +178,29 @@ const FirstRunWizard = ({ onComplete }) => {
                     position: relative;
                     overflow: hidden;
                 }
+                
+                .wizard-header {
+                    text-align: center;
+                    margin-bottom: 40px;
+                }
+                
+                .wizard-header h1 {
+                     font-size: 28px;
+                     margin-bottom: 10px;
+                }
+
+                .options-container {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 20px; /* Separación clara entre los botones */
+                    width: 100%;
+                }
 
                 .option-card {
                     background: rgba(255,255,255,0.03);
                     border: 1px solid rgba(255,255,255,0.05);
                     border-radius: 16px;
-                    padding: 24px;
+                    padding: 30px; /* Más padding para que sean "largos" (altos) */
                     display: flex;
                     align-items: center;
                     gap: 24px;
@@ -191,33 +208,59 @@ const FirstRunWizard = ({ onComplete }) => {
                     text-align: left;
                     transition: all 0.2s;
                     color: white;
+                    width: 100%; /* Ocupar todo el ancho disponible */
+                    position: relative;
                 }
 
                 .option-card:hover {
                     background: rgba(255,255,255,0.06);
                     border-color: rgba(255,255,255,0.2);
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
                 }
 
                 .option-card.download .icon-wrapper { background: linear-gradient(135deg, #60a5fa, #2563eb); box-shadow: 0 0 20px rgba(37, 99, 235, 0.3); }
                 .option-card.locate .icon-wrapper { background: linear-gradient(135deg, #34d399, #059669); box-shadow: 0 0 20px rgba(5, 150, 105, 0.3); }
                 
-                .icon-wrapper { width: 60px; height: 60px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: white; }
+                .icon-wrapper { 
+                    width: 64px; 
+                    height: 64px; 
+                    border-radius: 16px; 
+                    display: flex; 
+                    align-items: center; 
+                    justify-content: center; 
+                    flex-shrink: 0; 
+                    color: white; 
+                }
+                
+                .option-info h3 {
+                    font-size: 18px;
+                    font-weight: 700;
+                    margin-bottom: 6px;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                }
+                
+                 .option-info p {
+                    font-size: 14px;
+                    color: #94a3b8;
+                    margin: 0;
+                }
 
                 /* Progress View Styles */
-                .progress-view { display: flex; flex-direction: column; align-items: center; width: 100%; }
+                .progress-view { display: flex; flex-direction: column; align-items: center; width: 100%; padding: 20px; }
                 
                 .hex-spinner {
-                    width: 60px;
-                    height: 60px;
+                    width: 70px;
+                    height: 70px;
                     border: 4px solid rgba(255,255,255,0.1);
-                    border-left-color: var(--accent-primary);
+                    border-left-color: var(--accent-primary, #6366f1);
                     border-radius: 50%;
                     animation: spin 1s linear infinite;
-                    margin-bottom: 24px;
+                    margin-bottom: 30px;
                 }
 
                 .status-title {
-                    font-size: 20px;
+                    font-size: 22px;
                     font-weight: 700;
                     letter-spacing: 1px;
                     margin-bottom: 30px;
@@ -228,9 +271,9 @@ const FirstRunWizard = ({ onComplete }) => {
 
                 .progress-container-cyber {
                     width: 100%;
-                    height: 12px;
+                    height: 14px;
                     background: rgba(0,0,0,0.4);
-                    border-radius: 6px;
+                    border-radius: 7px;
                     position: relative;
                     overflow: hidden;
                     border: 1px solid rgba(255,255,255,0.1);
@@ -238,20 +281,20 @@ const FirstRunWizard = ({ onComplete }) => {
 
                 .progress-bar-fill-cyber {
                     height: 100%;
-                    background: linear-gradient(90deg, var(--accent-secondary), var(--accent-primary));
+                    background: linear-gradient(90deg, #818cf8, #6366f1);
                     width: 0%;
                     transition: width 0.2s ease-out;
-                    box-shadow: 0 0 20px var(--accent-primary);
+                    box-shadow: 0 0 20px #6366f1;
                 }
                 
                 .progress-glow {
                     position: absolute;
                     top: 0;
                     bottom: 0;
-                    width: 20px;
-                    background: rgba(255,255,255,0.8);
-                    filter: blur(5px);
-                    opacity: 0.6;
+                    width: 40px;
+                    background: rgba(255,255,255,0.6);
+                    filter: blur(10px);
+                    opacity: 0.5;
                     transition: left 0.2s ease-out;
                 }
 
@@ -259,14 +302,14 @@ const FirstRunWizard = ({ onComplete }) => {
                     display: flex;
                     justify-content: space-between;
                     width: 100%;
-                    margin-top: 12px;
+                    margin-top: 15px;
                     font-size: 14px;
-                    font-family: monospace;
-                    color: rgba(255,255,255,0.6);
+                    font-family: 'Consolas', monospace;
+                    color: rgba(255,255,255,0.7);
                 }
 
                 .sub-text-warning {
-                    margin-top: 30px;
+                    margin-top: 40px;
                     font-size: 13px;
                     color: #fbbf24;
                     background: rgba(251, 191, 36, 0.1);
