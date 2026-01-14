@@ -1,5 +1,7 @@
 import React from 'react';
 import { Play } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import PlayLoadingScreen from '../components/PlayLoadingScreen';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: { send: () => { }, on: () => { }, removeListener: () => { }, invoke: () => { } } };
 
@@ -29,6 +31,7 @@ const Home = () => {
   const [serverData, setServerData] = React.useState({ players: 0, maxPlayers: 0, online: false });
   const [playerName, setPlayerName] = React.useState('');
   const [news, setNews] = React.useState(DEFAULT_NEWS);
+  const [isLaunching, setIsLaunching] = React.useState(false);
 
   React.useEffect(() => {
     // Initial fetch server info
@@ -48,7 +51,8 @@ const Home = () => {
     // Fetch News dynamically
     const fetchNews = async () => {
       try {
-        const response = await fetch(NEWS_API_URL);
+        // Add timestamp to query to bypass GitHub raw cache
+        const response = await fetch(`${NEWS_API_URL}?t=${new Date().getTime()}`);
         if (response.ok) {
           const data = await response.json();
           if (Array.isArray(data) && data.length > 0) {
@@ -85,7 +89,17 @@ const Home = () => {
       alert('Por favor configura la ruta del juego en Ajustes primero.');
       return;
     }
-    ipcRenderer.send('launch-game', path);
+    // Start the loading animation
+    setIsLaunching(true);
+  };
+
+  const handleLaunchComplete = () => {
+    const path = localStorage.getItem('gtapath');
+    if (path) {
+      ipcRenderer.send('launch-game', path);
+    }
+    // Optional: Reset state or keep it true until app closes
+    setIsLaunching(false);
   };
 
   const savePlayerName = () => {
@@ -97,6 +111,10 @@ const Home = () => {
 
   return (
     <div className="home-container animate-fade-in">
+      <AnimatePresence>
+        {isLaunching && <PlayLoadingScreen onComplete={handleLaunchComplete} />}
+      </AnimatePresence>
+
       {/* Background with Gradient Mesh (simulated via CSS) */}
       <div className="bg-gradient-mesh" />
 

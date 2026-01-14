@@ -12,6 +12,13 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Duduuuu-cyber",
+        "repo": "gta-hub-launcher"
+      }
+    ],
     "win": {
       "target": "nsis",
       "icon": "src/assets/icon.png"

@@ -120,6 +120,7 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(() => {
+    autoUpdater.checkForUpdatesAndNotify();
     createWindow()
 
     // Window Controls IPC

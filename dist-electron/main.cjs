@@ -14428,6 +14428,7 @@ require$$1$3.app.on("activate", () => {
   if (require$$1$3.BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 require$$1$3.app.whenReady().then(() => {
+  autoUpdater.checkForUpdatesAndNotify();
   createWindow();
   require$$1$3.ipcMain.on("minimize-window", () => {
     win == null ? void 0 : win.minimize();
