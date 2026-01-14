@@ -23,7 +23,7 @@ const DEFAULT_NEWS = [
 ];
 
 // URL del JSON de noticias (Cámbiala por tu URL real de GitHub/Pastebin)
-const NEWS_API_URL = 'https://raw.githubusercontent.com/TU_USUARIO/TU_REPO/main/news.json';
+const NEWS_API_URL = 'https://raw.githubusercontent.com/Duduuuu-cyber/gta-hub-launcher/refs/heads/main/news.json';
 
 const Home = () => {
   const [serverData, setServerData] = React.useState({ players: 0, maxPlayers: 0, online: false });
