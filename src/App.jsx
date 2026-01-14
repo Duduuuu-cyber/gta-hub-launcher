@@ -43,7 +43,20 @@ function App() {
   useEffect(() => {
     const checkSetup = async () => {
       const path = localStorage.getItem('gtapath');
-      if (!path) setNeedsSetup(true);
+      if (path) {
+        setNeedsSetup(false);
+      } else {
+        // Not configured? Let's check if we are already inside the game folder!
+        // We will call the new IPC handler: 'check-local-game'
+        // If it returns a path, use it. If null, show wizard.
+        const localPath = await ipcRenderer.invoke('check-local-game');
+        if (localPath) {
+          localStorage.setItem('gtapath', localPath);
+          setNeedsSetup(false);
+        } else {
+          setNeedsSetup(true);
+        }
+      }
     };
     checkSetup();
   }, []);

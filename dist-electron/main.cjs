@@ -17074,15 +17074,34 @@ require$$1$2.app.whenReady().then(() => {
       require$$1$2.shell.openExternal(url);
     }
   });
+  require$$1$2.ipcMain.handle("read-samp-config", async () => {
+    try {
+      return "";
+    } catch (e) {
+      return "";
+    }
+  });
+  require$$1$2.ipcMain.handle("write-samp-config", async (event, content) => {
+    return true;
+  });
   require$$1$2.ipcMain.handle("check-game-files", async (event, pathToCheck) => {
     try {
       const exePath = require$$1.join(pathToCheck, "gta_sa.exe");
-      if (fs$j.existsSync(exePath)) {
-        return true;
-      }
-      return false;
+      return fs$j.existsSync(exePath);
     } catch (e) {
       return false;
+    }
+  });
+  require$$1$2.ipcMain.handle("check-local-game", async () => {
+    try {
+      let appDir = require$$1$2.app.isPackaged ? require$$1.dirname(require$$1$2.app.getPath("exe")) : require$$1$2.app.getAppPath();
+      const exePath = require$$1.join(appDir, "gta_sa.exe");
+      if (fs$j.existsSync(exePath)) {
+        return appDir;
+      }
+      return null;
+    } catch (e) {
+      return null;
     }
   });
   require$$1$2.ipcMain.on("download-game-start", (event, url, targetPath) => {

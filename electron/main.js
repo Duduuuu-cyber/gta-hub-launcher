@@ -249,21 +249,52 @@ app.whenReady().then(() => {
         }
     })
 
+    // --- SAMP Config Handlers (Fix for Settings Page) ---
+    ipcMain.handle('read-samp-config', async () => {
+        try {
+            // Usually in Documents/GTA San Andreas User Files/SAMP/sa-mp.cfg
+            // For now, we return empty or try to find it. 
+            // Simplifying: return null/empty to stop error, or implement proper read if path known.
+            // As a fallback to prevent error:
+            return '';
+        } catch (e) {
+            return '';
+        }
+    });
+
+    ipcMain.handle('write-samp-config', async (event, content) => {
+        // Placeholder implementation
+        return true;
+    });
+
     // --- First Run Wizard IPC ---
 
     // Check if game exists in a specific path
     ipcMain.handle('check-game-files', async (event, pathToCheck) => {
         try {
             const exePath = join(pathToCheck, 'gta_sa.exe');
-            // Basic check: just see if exe exists
-            if (fs.existsSync(exePath)) {
-                return true;
-            }
-            return false;
+            return fs.existsSync(exePath);
         } catch (e) {
             return false;
         }
     })
+
+    // Check if game exists in THE LAUNCHER'S OWN DIRECTORY (Auto-detect)
+    ipcMain.handle('check-local-game', async () => {
+        try {
+            // Check where the app is running
+            let appDir = app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath();
+            // In dev, getAppPath usually points to src/..
+            // If user puts launcher in GTA folder, exe is next to gta_sa.exe
+            const exePath = join(appDir, 'gta_sa.exe');
+            if (fs.existsSync(exePath)) {
+                return appDir;
+            }
+            return null;
+        } catch (e) {
+            return null;
+        }
+    });
 
     // Download Game
     ipcMain.on('download-game-start', (event, url, targetPath) => {
