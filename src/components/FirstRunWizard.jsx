@@ -67,18 +67,8 @@ const FirstRunWizard = ({ onComplete }) => {
 
     const handleDownload = async () => {
         setStep('downloading');
-        // Example URL - user should probably provide a real one or we host one
-        // Using a dummy small file for test if real url not provided
-        // But per request: "descargará desde la nube". 
-        // I will use a placeholder or if user provides one. 
-        // For now let's assume a variable we can easily change.
-        const GAME_URL = "https://example.com/gta_sa_lite.zip";
-
-        if (GAME_URL.includes("example.com")) {
-            alert("¡OJO! No tengo una URL real del GTA. Por favor edita el componente FirstRunWizard.jsx con el link directo a tu .zip");
-            setStep('selection');
-            return;
-        }
+        // Real URL provided by user
+        const GAME_URL = "https://launcher.seoul-rp.net/archivos/GTA_FULL.zip";
 
         const appPath = await ipcRenderer.invoke('get-app-path');
         const zipTarget = appPath + '\\gta_temp.zip';
@@ -104,7 +94,7 @@ const FirstRunWizard = ({ onComplete }) => {
                         <div className="options-grid">
                             <motion.button
                                 className="option-card download"
-                                whileHover={{ scale: 1.02 }}
+                                whileHover={{ scale: 1.02, borderColor: "rgba(59, 130, 246, 0.5)" }}
                                 whileTap={{ scale: 0.98 }}
                                 onClick={handleDownload}
                             >
@@ -113,13 +103,13 @@ const FirstRunWizard = ({ onComplete }) => {
                                 </div>
                                 <div className="option-info">
                                     <h3>OBTENER EL JUEGO</h3>
-                                    <p>Descargar e instalar automáticamente versión optimizada.</p>
+                                    <p>Descargar versión optimizada (Recomendado)</p>
                                 </div>
                             </motion.button>
 
                             <motion.button
                                 className="option-card locate"
-                                whileHover={{ scale: 1.02 }}
+                                whileHover={{ scale: 1.02, borderColor: "rgba(16, 185, 129, 0.5)" }}
                                 whileTap={{ scale: 0.98 }}
                                 onClick={handleLocate}
                             >
@@ -136,16 +126,28 @@ const FirstRunWizard = ({ onComplete }) => {
                 )}
 
                 {(step === 'downloading' || step === 'extracting') && (
-                    <div className="progress-view">
+                    <motion.div
+                        className="progress-view"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                    >
                         <div className="spinner-container">
-                            <HardDrive size={48} className="animate-pulse" />
+                            <div className="hex-spinner"></div>
                         </div>
-                        <h2>{statusText}</h2>
-                        <div className="progress-bar-container">
-                            <div className="progress-bar-fill" style={{ width: `${downloadProgress}%` }} />
+                        <h2 className="status-title">{statusText}</h2>
+
+                        <div className="progress-container-cyber">
+                            <div className="progress-bar-fill-cyber" style={{ width: `${downloadProgress}%` }} />
+                            <div className="progress-glow" style={{ left: `${downloadProgress}%` }} />
                         </div>
-                        <p className="sub-text">Por favor no cierres el launcher.</p>
-                    </div>
+
+                        <div className="stats-row">
+                            <span>{step === 'downloading' ? 'Descargando archivos...' : 'Descomprimiendo y verificando...'}</span>
+                            <span className="percent-text">{Math.round(downloadProgress)}%</span>
+                        </div>
+
+                        <p className="sub-text-warning">Por favor no cierres el launcher. Esto puede tomar unos minutos.</p>
+                    </motion.div>
                 )}
             </motion.div>
 
@@ -156,8 +158,8 @@ const FirstRunWizard = ({ onComplete }) => {
                     left: 0;
                     right: 0;
                     bottom: 0;
-                    background: rgba(0,0,0,0.85);
-                    backdrop-filter: blur(10px);
+                    background: rgba(5, 5, 10, 0.95);
+                    backdrop-filter: blur(20px);
                     z-index: 2000;
                     display: flex;
                     align-items: center;
@@ -166,48 +168,25 @@ const FirstRunWizard = ({ onComplete }) => {
                 }
 
                 .wizard-card {
-                    background: #141419;
-                    border: 1px solid rgba(255,255,255,0.1);
-                    border-radius: 16px;
-                    padding: 40px;
+                    background: linear-gradient(145deg, #1a1a23, #111116);
+                    border: 1px solid rgba(255,255,255,0.08);
+                    border-radius: 24px;
+                    padding: 50px;
                     width: 90%;
-                    max-width: 600px;
-                    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-                }
-
-                .wizard-header {
-                    text-align: center;
-                    margin-bottom: 30px;
-                }
-
-                .wizard-header h1 {
-                    font-size: 24px;
-                    font-weight: 800;
-                    margin-bottom: 8px;
-                    background: linear-gradient(to right, white, #94a3b8);
-                    -webkit-background-clip: text;
-                    -webkit-text-fill-color: transparent;
-                }
-
-                .wizard-header p {
-                    color: var(--text-muted, #94a3b8);
-                    font-size: 14px;
-                }
-
-                .options-grid {
-                    display: grid;
-                    grid-template-columns: 1fr;
-                    gap: 16px;
+                    max-width: 650px;
+                    box-shadow: 0 0 50px rgba(0,0,0,0.6);
+                    position: relative;
+                    overflow: hidden;
                 }
 
                 .option-card {
                     background: rgba(255,255,255,0.03);
-                    border: 1px solid rgba(255,255,255,0.08);
-                    border-radius: 12px;
-                    padding: 20px;
+                    border: 1px solid rgba(255,255,255,0.05);
+                    border-radius: 16px;
+                    padding: 24px;
                     display: flex;
                     align-items: center;
-                    gap: 20px;
+                    gap: 24px;
                     cursor: pointer;
                     text-align: left;
                     transition: all 0.2s;
@@ -219,64 +198,83 @@ const FirstRunWizard = ({ onComplete }) => {
                     border-color: rgba(255,255,255,0.2);
                 }
 
-                .option-card.download .icon-wrapper {
-                    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+                .option-card.download .icon-wrapper { background: linear-gradient(135deg, #60a5fa, #2563eb); box-shadow: 0 0 20px rgba(37, 99, 235, 0.3); }
+                .option-card.locate .icon-wrapper { background: linear-gradient(135deg, #34d399, #059669); box-shadow: 0 0 20px rgba(5, 150, 105, 0.3); }
+                
+                .icon-wrapper { width: 60px; height: 60px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: white; }
+
+                /* Progress View Styles */
+                .progress-view { display: flex; flex-direction: column; align-items: center; width: 100%; }
+                
+                .hex-spinner {
+                    width: 60px;
+                    height: 60px;
+                    border: 4px solid rgba(255,255,255,0.1);
+                    border-left-color: var(--accent-primary);
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                    margin-bottom: 24px;
                 }
 
-                .option-card.locate .icon-wrapper {
-                   background: linear-gradient(135deg, #10b981, #059669);
-                }
-
-                .icon-wrapper {
-                    width: 50px;
-                    height: 50px;
-                    border-radius: 10px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    flex-shrink: 0;
-                }
-
-                .option-info h3 {
-                    font-size: 16px;
+                .status-title {
+                    font-size: 20px;
                     font-weight: 700;
-                    margin-bottom: 4px;
+                    letter-spacing: 1px;
+                    margin-bottom: 30px;
+                    background: linear-gradient(to right, white, #cbd5e1);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
                 }
 
-                .option-info p {
-                    font-size: 13px;
-                    color: var(--text-muted, #94a3b8);
-                    margin: 0;
-                }
-
-                .progress-view {
-                    text-align: center;
-                    padding: 20px 0;
-                }
-
-                .progress-bar-container {
+                .progress-container-cyber {
                     width: 100%;
-                    height: 6px;
-                    background: rgba(255,255,255,0.1);
-                    border-radius: 3px;
-                    margin: 20px 0;
+                    height: 12px;
+                    background: rgba(0,0,0,0.4);
+                    border-radius: 6px;
+                    position: relative;
                     overflow: hidden;
+                    border: 1px solid rgba(255,255,255,0.1);
                 }
 
-                .progress-bar-fill {
+                .progress-bar-fill-cyber {
                     height: 100%;
-                    background: var(--accent-primary, #8b5cf6);
-                    transition: width 0.3s;
+                    background: linear-gradient(90deg, var(--accent-secondary), var(--accent-primary));
+                    width: 0%;
+                    transition: width 0.2s ease-out;
+                    box-shadow: 0 0 20px var(--accent-primary);
                 }
                 
-                .animate-pulse {
-                    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+                .progress-glow {
+                    position: absolute;
+                    top: 0;
+                    bottom: 0;
+                    width: 20px;
+                    background: rgba(255,255,255,0.8);
+                    filter: blur(5px);
+                    opacity: 0.6;
+                    transition: left 0.2s ease-out;
                 }
 
-                @keyframes pulse {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: .5; }
+                .stats-row {
+                    display: flex;
+                    justify-content: space-between;
+                    width: 100%;
+                    margin-top: 12px;
+                    font-size: 14px;
+                    font-family: monospace;
+                    color: rgba(255,255,255,0.6);
                 }
+
+                .sub-text-warning {
+                    margin-top: 30px;
+                    font-size: 13px;
+                    color: #fbbf24;
+                    background: rgba(251, 191, 36, 0.1);
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                }
+
+                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
             `}</style>
         </div>
     );
