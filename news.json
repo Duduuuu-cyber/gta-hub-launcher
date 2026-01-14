@@ -2,8 +2,8 @@
     {
         "id": 1,
         "tag": "UPDATE",
-        "title": "Your Update Title",
-        "description": "Your update description here.",
+        "title": "CAMBIOS MARRONES",
+        "description": "Se han realizado los siguientes cambios:",
         "startColor": "#1e1b4b",
         "endColor": "#312e81",
         "link": "https://your-link.com"
@@ -11,8 +11,8 @@
     {
         "id": 2,
         "tag": "EVENT",
-        "title": "Your Event Title",
-        "description": "Your event details.",
+        "title": "EVENTO MARRON",
+        "description": "Se han realizado los siguientes cambios:",
         "startColor": "#831843",
         "endColor": "#9d174d"
     }
