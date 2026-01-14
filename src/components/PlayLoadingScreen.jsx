@@ -2,16 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 
 const PlayLoadingScreen = ({ onComplete }) => {
-    const [status, setStatus] = useState('INITIATING LINK');
+    const [status, setStatus] = useState('INICIANDO GTASEOUL...');
     const [progress, setProgress] = useState(0);
 
     useEffect(() => {
         const statuses = [
-            { p: 15, text: 'CONNECTING TO SEOUL MAIN NETWORK...' },
-            { p: 35, text: 'AUTHENTICATING USER CREDENTIALS...' },
-            { p: 60, text: 'SYNCHRONIZING ASSETS...' },
-            { p: 85, text: 'PREPARING GAME ENGINE...' },
-            { p: 95, text: 'LAUNCHING...' }
+            { p: 15, text: 'CONECTANDO A LA RED DE SEOUL...' },
+            { p: 35, text: 'AUTENTICANDO CREDENCIALES...' },
+            { p: 60, text: 'SINCRONIZANDO RECURSOS...' },
+            { p: 85, text: 'PREPARANDO MOTOR DE JUEGO...' },
+            { p: 95, text: 'EJECUTANDO...' }
         ];
 
         let currentStep = 0;
