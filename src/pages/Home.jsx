@@ -94,12 +94,20 @@ const Home = () => {
 
 
   const handlePlay = () => {
+    // 1. Validator: Player Name needed
+    if (!playerName || playerName.trim().length === 0) {
+      alert('Debes ingresar un nombre de usuario para jugar.');
+      return;
+    }
+
+    // 2. Validator: Game Path needed
     const path = localStorage.getItem('gtapath');
     if (!path) {
       alert('Por favor configura la ruta del juego en Ajustes primero.');
       return;
     }
-    // Start the loading animation
+
+    // 3. Start Loading (Blocks UI)
     setIsLaunching(true);
   };
 
@@ -108,8 +116,11 @@ const Home = () => {
     if (path) {
       ipcRenderer.send('launch-game', path);
     }
-    // Optional: Reset state or keep it true until app closes
-    setIsLaunching(false);
+
+    // Cooldown: Keep isLaunching true for a few extra seconds to prevent spam
+    setTimeout(() => {
+      setIsLaunching(false);
+    }, 5000); // 5 seconds cooldown
   };
 
   const savePlayerName = () => {

@@ -73,7 +73,8 @@ function App() {
   useEffect(() => {
     const checkSetup = async () => {
       let path = localStorage.getItem('gtapath');
-      console.log('[DEBUG-RENDERER] Start Check. Stored path:', path);
+      const isSetupCompleted = localStorage.getItem('setup_completed') === 'true';
+      console.log('[DEBUG-RENDERER] Start Check. Stored path:', path, 'SetupCompleted:', isSetupCompleted);
 
       // 1. If path is stored, verify it acts like a valid game folder
       if (path) {
@@ -86,14 +87,14 @@ function App() {
         }
       }
 
-      // 2. Decide next step
-      if (path) {
+      // 2. Decide next step: Force Wizard if NO Valid Path OR Setup NOT Completed explicitly
+      // This ensures that even if a path exists from a previous install, if we haven't marked "setup_completed", we ask again.
+      // NOTE: If the user manually deleted the flag, they see the wizard.
+      if (path && isSetupCompleted) {
         console.log('[DEBUG-RENDERER] Setup OK. Path:', path);
         setNeedsSetup(false);
       } else {
-        // If not configured in localStorage, ALWAYS show wizard so user can choose
-        // checking local auto-detect is fine for hints, but we won't auto-apply it.
-        console.log('[DEBUG-RENDERER] No localStorage path. Enforcing Wizard.');
+        console.log('[DEBUG-RENDERER] Enforcing Wizard (No path OR No Setup Flag).');
         setNeedsSetup(true);
       }
     };
@@ -131,6 +132,7 @@ function App() {
   }, []);
 
   const handleSetupComplete = () => {
+    localStorage.setItem('setup_completed', 'true');
     setNeedsSetup(false);
   };
 
