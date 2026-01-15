@@ -319,6 +319,9 @@ const Settings = () => {
       <div className="actions">
         {updateStatus && <span className="update-status-msg" style={{ color: '#60a5fa', marginRight: 20 }}>{updateStatus}</span>}
         {statusMsg && <span className="status-msg">{statusMsg}</span>}
+        <button className="btn-secondary" style={{ marginRight: 10 }} onClick={() => ipcRenderer.send('manual-check-update')}>
+          Buscar actualizaciones
+        </button>
         <button className="btn-primary" onClick={handleSave}>
           <Save size={18} />
           Guardar Cambios

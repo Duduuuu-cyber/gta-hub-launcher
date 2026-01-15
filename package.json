@@ -1,7 +1,7 @@
 {
   "name": "gta-hub-launcher",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "main": "dist-electron/main.cjs",
   "author": "GTASeoul",
@@ -51,6 +51,7 @@
     "adm-zip": "^0.5.16",
     "bufferutil": "^4.1.0",
     "discord-rpc": "^4.0.1",
+    "electron-log": "^5.4.3",
     "electron-updater": "^6.7.3",
     "framer-motion": "^10.18.0",
     "lucide-react": "^0.309.0",

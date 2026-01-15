@@ -22,8 +22,28 @@ process.env.DIST = join(__dirname, '../dist_build')
 process.env.PUBLIC = app.isPackaged ? process.env.DIST : join(__dirname, '../public')
 
 // Auto-Updater Config
+const log = require('electron-log');
+log.transports.file.level = 'debug';
+autoUpdater.logger = log;
 autoUpdater.autoDownload = false; // Disable auto download to ask user first
 autoUpdater.autoInstallOnAppQuit = false;
+if (process.env.NODE_ENV === 'development') {
+    autoUpdater.forceDevUpdateConfig = true;
+}
+
+ipcMain.on('manual-check-update', () => {
+    log.info('Manual update check triggered');
+    autoUpdater.checkForUpdates();
+});
+
+ipcMain.on('check-for-updates', () => {
+    log.info('Startup update check triggered');
+    autoUpdater.checkForUpdates();
+});
+
+ipcMain.handle('get-app-version', () => {
+    return app.getVersion();
+});
 
 // Updater Events
 const sendStatusToWindow = (text) => {

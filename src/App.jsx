@@ -9,11 +9,25 @@ import Settings from './pages/Settings'
 import Mods from './pages/Mods'
 import SplashScreen from './components/SplashScreen'
 import FirstRunWizard from './components/FirstRunWizard'
+import UpdateModal from './components/UpdateModal'
 
-const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: { invoke: () => Promise.resolve(null) } };
+const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: { invoke: () => Promise.resolve(null), on: () => { }, removeListener: () => { }, send: () => { } } };
 
 const Sidebar = () => {
   const location = useLocation();
+  const [version, setVersion] = useState('...');
+
+  useEffect(() => {
+    const getVersion = async () => {
+      try {
+        const ver = await ipcRenderer.invoke('get-app-version');
+        setVersion(ver || '1.0.0');
+      } catch (err) {
+        console.error('Failed to get version:', err);
+      }
+    };
+    getVersion();
+  }, []);
 
   return (
     <div className="sidebar">
@@ -40,7 +54,7 @@ const Sidebar = () => {
         </NavLink>
       </nav>
 
-      <div className="version-tag">v1.0.0</div>
+      <div className="version-tag">v{version}</div>
     </div>
   )
 }
@@ -48,6 +62,13 @@ const Sidebar = () => {
 function App() {
   const [loading, setLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
+
+  // Update State
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [readyToInstall, setReadyToInstall] = useState(false);
 
   useEffect(() => {
     const checkSetup = async () => {
@@ -77,10 +98,49 @@ function App() {
       }
     };
     checkSetup();
+
+    // Global Update Listeners
+    const onUpdateAvailable = (event, info) => {
+      console.log('Update Available:', info);
+      setUpdateInfo(info);
+      setShowUpdateModal(true);
+    };
+
+    const onDownloadProgress = (event, percent) => {
+      setIsDownloading(true);
+      setDownloadProgress(percent);
+    };
+
+    const onReadyToInstall = (event, info) => {
+      setIsDownloading(false);
+      setReadyToInstall(true);
+    };
+
+    ipcRenderer.on('update-available-prompt', onUpdateAvailable);
+    ipcRenderer.on('update-download-progress', onDownloadProgress);
+    ipcRenderer.on('update-ready-to-install', onReadyToInstall);
+
+    // Trigger check on startup
+    ipcRenderer.send('check-for-updates');
+
+    return () => {
+      ipcRenderer.removeListener('update-available-prompt', onUpdateAvailable);
+      ipcRenderer.removeListener('update-download-progress', onDownloadProgress);
+      ipcRenderer.removeListener('update-ready-to-install', onReadyToInstall);
+    };
   }, []);
 
   const handleSetupComplete = () => {
     setNeedsSetup(false);
+  };
+
+  const handleStartUpdate = () => {
+    setIsDownloading(true);
+    ipcRenderer.send('start-download-update');
+  };
+
+  const handleInstallUpdate = () => {
+    ipcRenderer.send('install-update-now');
   };
 
   return (
@@ -92,6 +152,17 @@ function App() {
       ) : (
         <div className="app-container">
           <TitleBar />
+          {showUpdateModal && (
+            <UpdateModal
+              updateInfo={updateInfo}
+              onClose={() => setShowUpdateModal(false)}
+              isDownloading={isDownloading}
+              downloadProgress={downloadProgress}
+              readyToInstall={readyToInstall}
+              onStartUpdate={handleStartUpdate}
+              onInstallUpdate={handleInstallUpdate}
+            />
+          )}
           <Router>
             <div className="main-layout">
               <Sidebar />
