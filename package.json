@@ -1,7 +1,7 @@
 {
-  "name": "gta-hub-launcher",
+  "name": "gtaseoul-launcher",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.6",
   "type": "module",
   "main": "dist-electron/main.cjs",
   "author": "GTASeoul",

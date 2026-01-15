@@ -93,7 +93,10 @@ const Home = () => {
 
 
 
+  /* Prevent spam clicking play */
   const handlePlay = () => {
+    if (isLaunching) return;
+
     // 1. Validator: Player Name needed
     if (!playerName || playerName.trim().length === 0) {
       alert('Debes ingresar un nombre de usuario para jugar.');
@@ -111,17 +114,19 @@ const Home = () => {
     setIsLaunching(true);
   };
 
-  const handleLaunchComplete = () => {
+  const handleLaunchComplete = React.useCallback(() => {
     const path = localStorage.getItem('gtapath');
     if (path) {
+      // Send launch signal
       ipcRenderer.send('launch-game', path);
     }
 
-    // Cooldown: Keep isLaunching true for a few extra seconds to prevent spam
+    // Cooldown: Keep isLaunching true for a few extra seconds to prevent immediate re-launch
+    // This also gives time for the game window to appear
     setTimeout(() => {
       setIsLaunching(false);
-    }, 5000); // 5 seconds cooldown
-  };
+    }, 10000);
+  }, []);
 
   const savePlayerName = () => {
     // Save to Registry
@@ -197,10 +202,10 @@ const Home = () => {
               <span className="input-hint">Tu identidad en el servidor</span>
             </div>
 
-            <button className="play-btn" onClick={handlePlay}>
+            <button className="play-btn" onClick={handlePlay} disabled={isLaunching} style={{ opacity: isLaunching ? 0.7 : 1, cursor: isLaunching ? 'not-allowed' : 'pointer' }}>
               <div className="btn-content">
                 <Play fill="currentColor" size={24} />
-                <span>JUGAR AHORA</span>
+                <span>{isLaunching ? 'INICIANDO...' : 'JUGAR AHORA'}</span>
               </div>
               <div className="btn-glow"></div>
             </button>

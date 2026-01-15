@@ -171,8 +171,8 @@ const Mods = () => {
                                                 </div>
                                             </div>
                                         ) : isInstalled ? (
-                                            <button className="btn-installed" disabled>
-                                                <Check size={16} /> Instalado
+                                            <button className="btn-installed" onClick={() => handleInstall(mod)}>
+                                                <Check size={16} /> Reinstalar
                                             </button>
                                         ) : (
                                             <button className="btn-install" onClick={() => handleInstall(mod)}>

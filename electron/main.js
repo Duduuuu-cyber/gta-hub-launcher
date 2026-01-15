@@ -21,6 +21,20 @@ let currentPlayerName = '';
 process.env.DIST = join(__dirname, '../dist_build')
 process.env.PUBLIC = app.isPackaged ? process.env.DIST : join(__dirname, '../public')
 
+// Single Instance Lock
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+    app.quit()
+} else {
+    app.on('second-instance', (event, commandLine, workingDirectory) => {
+        // Someone tried to run a second instance, we should focus our window.
+        if (win) {
+            if (win.isMinimized()) win.restore()
+            win.focus()
+        }
+    })
+}
+
 // Auto-Updater Config
 const log = require('electron-log');
 log.transports.file.level = 'debug';
@@ -358,8 +372,17 @@ app.whenReady().then(() => {
     })
 
     // Launch Game
+    let lastLaunchTime = 0;
     ipcMain.on('launch-game', async (event, gamePath) => {
         if (!gamePath) return;
+
+        // Anti-spam / Debounce (10 seconds)
+        const now = Date.now();
+        if (now - lastLaunchTime < 10000) {
+            console.log('[Launch] Blocked to prevent spam. Time since last launch:', now - lastLaunchTime, 'ms');
+            return;
+        }
+        lastLaunchTime = now;
 
         const dns = await import('dns/promises');
         const { spawn } = await import('child_process');
@@ -388,6 +411,8 @@ app.whenReady().then(() => {
 
         } catch (error) {
             console.error('Failed to launch game:', error);
+            // Reset timer on error to allow retry
+            lastLaunchTime = 0;
         }
     })
 

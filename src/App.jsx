@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { HashRouter as Router, Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { Home as HomeIcon, Settings as SettingsIcon, Server, Shield, Package } from 'lucide-react'
+import { Home as HomeIcon, Settings as SettingsIcon, Server, Shield, Package, History } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
 import logoSeoul from './assets/Logo_Seoul_Prueba_8.png'
 import TitleBar from './components/TitleBar'
 import Home from './pages/Home'
 import Settings from './pages/Settings'
 import Mods from './pages/Mods'
+import Changelog from './pages/Changelog'
 import SplashScreen from './components/SplashScreen'
 import FirstRunWizard from './components/FirstRunWizard'
 import UpdateModal from './components/UpdateModal'
@@ -46,6 +47,11 @@ const Sidebar = () => {
           <Package size={20} />
           <span>Mods</span>
           {location.pathname === '/mods' && <div className="active-indicator" />}
+        </NavLink>
+        <NavLink to="/changelog" className="nav-item">
+          <History size={20} />
+          <span>Changelog</span>
+          {location.pathname === '/changelog' && <div className="active-indicator" />}
         </NavLink>
         <NavLink to="/settings" className="nav-item">
           <SettingsIcon size={20} />
@@ -172,6 +178,7 @@ function App() {
                 <Routes>
                   <Route path="/" element={<Home />} />
                   <Route path="/mods" element={<Mods />} />
+                  <Route path="/changelog" element={<Changelog />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>
               </div>
