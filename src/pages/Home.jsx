@@ -1,7 +1,9 @@
 import React from 'react';
-import { Play } from 'lucide-react';
+import { Play, Zap, Star, Gift, Megaphone, Calendar, User } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import PlayLoadingScreen from '../components/PlayLoadingScreen';
+
+import VideoSpotlight from '../components/VideoSpotlight';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: { send: () => { }, on: () => { }, removeListener: () => { }, invoke: () => { } } };
 
@@ -28,20 +30,34 @@ const DEFAULT_NEWS = [
 const NEWS_API_URL = 'https://raw.githubusercontent.com/Duduuuu-cyber/gta-hub-launcher/refs/heads/main/news.json';
 
 const Home = () => {
-  const [serverData, setServerData] = React.useState({ players: 0, maxPlayers: 0, online: false });
+  const [serverData, setServerData] = React.useState({ players: 0, maxPlayers: 0, online: false, hostname: '' });
   const [playerName, setPlayerName] = React.useState('');
   const [news, setNews] = React.useState(DEFAULT_NEWS);
   const [isLaunching, setIsLaunching] = React.useState(false);
+
+  // Update Logic
+  const [showUpdateModal, setShowUpdateModal] = React.useState(false);
+  const [updateInfo, setUpdateInfo] = React.useState(null);
+  const [downloadProgress, setDownloadProgress] = React.useState(0);
+  const [isDownloading, setIsDownloading] = React.useState(false);
+  const [readyToInstall, setReadyToInstall] = React.useState(false);
 
   React.useEffect(() => {
     // Initial fetch server info
     ipcRenderer.send('get-server-info');
 
+    // Sync Discord RPC state
+    const rpcEnabled = localStorage.getItem('discordRpc') !== 'false';
+    ipcRenderer.send('toggle-discord-rpc', rpcEnabled);
+
     // Load Player Name from Registry
     const loadRegistry = async () => {
       try {
         const name = await ipcRenderer.invoke('get-registry-value', 'HKCU\\Software\\SAMP', 'PlayerName');
-        if (name) setPlayerName(name);
+        if (name) {
+          setPlayerName(name);
+          ipcRenderer.send('update-player-name', name);
+        }
       } catch (err) {
         console.error('Error loading registry:', err);
       }
@@ -77,11 +93,43 @@ const Home = () => {
       ipcRenderer.send('get-server-info');
     }, 5000);
 
+    // Update IPC Listeners
+    const onUpdateAvailable = (event, info) => {
+      setUpdateInfo(info);
+      setShowUpdateModal(true);
+    };
+
+    const onDownloadProgress = (event, percent) => {
+      setIsDownloading(true);
+      setDownloadProgress(percent);
+    };
+
+    const onReadyToInstall = (event, info) => {
+      setIsDownloading(false);
+      setReadyToInstall(true);
+    };
+
+    ipcRenderer.on('update-available-prompt', onUpdateAvailable);
+    ipcRenderer.on('update-download-progress', onDownloadProgress);
+    ipcRenderer.on('update-ready-to-install', onReadyToInstall);
+
     return () => {
       ipcRenderer.removeListener('server-info-reply', handleUpdate);
       clearInterval(interval);
+      ipcRenderer.removeListener('update-available-prompt', onUpdateAvailable);
+      ipcRenderer.removeListener('update-download-progress', onDownloadProgress);
+      ipcRenderer.removeListener('update-ready-to-install', onReadyToInstall);
     };
   }, []);
+
+  const handleStartUpdate = () => {
+    setIsDownloading(true);
+    ipcRenderer.send('start-download-update');
+  };
+
+  const handleInstallUpdate = () => {
+    ipcRenderer.send('install-update-now');
+  };
 
   const handlePlay = () => {
     const path = localStorage.getItem('gtapath');
@@ -113,6 +161,53 @@ const Home = () => {
     <div className="home-container animate-fade-in">
       <AnimatePresence>
         {isLaunching && <PlayLoadingScreen onComplete={handleLaunchComplete} />}
+
+        {showUpdateModal && (
+          <div className="modal-overlay">
+            <div className="update-modal">
+              <div className="modal-header">
+                <Megaphone size={24} className="modal-icon" />
+                <h2>¡Nueva Actualización Disponible!</h2>
+              </div>
+
+              {!isDownloading && !readyToInstall && (
+                <>
+                  <p className="modal-text">
+                    Se ha encontrado una nueva versión del launcher
+                    <span className="version-tag">v{updateInfo?.version}</span>.
+                    ¿Deseas actualizar ahora?
+                  </p>
+                  <div className="modal-actions">
+                    <button className="btn-cancel" onClick={() => setShowUpdateModal(false)}>Más tarde</button>
+                    <button className="btn-confirm" onClick={handleStartUpdate}>ACTUALIZAR AHORA</button>
+                  </div>
+                </>
+              )}
+
+              {isDownloading && (
+                <div className="download-status">
+                  <p>Descargando actualización...</p>
+                  <div className="progress-bar-container">
+                    <div className="progress-bar-fill" style={{ width: `${downloadProgress}%` }}></div>
+                  </div>
+                  <span className="progress-text">{Math.round(downloadProgress)}%</span>
+                </div>
+              )}
+
+              {readyToInstall && (
+                <>
+                  <p className="modal-text success">
+                    ¡Descarga completada correctamente!
+                    El launcher necesita reiniciarse para aplicar los cambios.
+                  </p>
+                  <div className="modal-actions">
+                    <button className="btn-confirm" onClick={handleInstallUpdate}>REINICIAR E INSTALAR</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </AnimatePresence>
 
       {/* Background with Gradient Mesh (simulated via CSS) */}
@@ -120,86 +215,119 @@ const Home = () => {
 
       <div className="content">
         <header className="hero-section">
-          <div className="status-badge">
-            <span className={`dot ${serverData.online ? 'online' : 'offline'}`}></span>
-            GTA Seoul <span className="player-count">({serverData.players} / {serverData.maxPlayers})</span>
-          </div>
 
-          <h1 className="hero-title">
-            BIENVENIDO A <br />
-            <span className="text-gradient">GTASeoul</span>
-          </h1>
-
-          <p className="hero-subtitle">
-            La experiencia de Roleplay definitiva. Únete ahora y forja tu destino.
-          </p>
-
-          <button className="play-btn" onClick={handlePlay}>
-            <div className="btn-content">
-              <Play fill="currentColor" size={24} />
-              <span>JUGAR AHORA</span>
+          <div className="hero-content">
+            <div className="status-badge">
+              <span className={`dot ${serverData.online ? 'online' : 'offline'}`}></span>
+              GTA Seoul <span className="player-count">({serverData.players} / {serverData.maxPlayers})</span>
             </div>
-            <div className="btn-glow"></div>
-          </button>
 
-          <div className="social-hub animate-fade-in-delayed">
+            <h1 className="hero-title">
+              BIENVENIDO A <br />
+              <span className="text-gradient">GTASeoul</span>
+            </h1>
 
-            {/* Discord Main CTA */}
-            <a href="#" className="social-card discord-card" onClick={(e) => { e.preventDefault(); ipcRenderer.send('open-external', 'https://discord.gg/your-invite'); }}>
-              <div className="icon-box discord-bg">
-                <svg width="20" height="20" viewBox="0 0 127.14 96.36" fill="white">
-                  <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.11,77.11,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22c2.36-24.44-5.42-48.18-18.9-72.15ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z" />
-                </svg>
-              </div>
-              <div className="card-info">
-                <span className="label">Comunidad Oficial</span>
-                <span className="sub">Discord</span>
-              </div>
-            </a>
+            <p className="hero-subtitle">
+              La experiencia de Roleplay definitiva. Únete ahora y forja tu destino.
+            </p>
 
-            {/* YouTube Channels - Stacked Cards */}
-            <a href="#" className="social-card youtube-card" onClick={(e) => { e.preventDefault(); ipcRenderer.send('open-external', 'https://www.youtube.com/@TRIPLEKYT'); }}>
-              <div className="icon-box youtube-bg">
-                <Play size={18} fill="white" />
+            {/* XP Bonus Indicators - Detect from Hostname */}
+            {(serverData.hostname && (serverData.hostname.includes('[x2 EXP]') || serverData.hostname.includes('[X5 EXP]'))) && (
+              <div className="xp-bonus-container animate-bounce-subtle">
+                {serverData.hostname.includes('[x2 EXP]') && (
+                  <div className="xp-badge double-xp">
+                    <Zap size={16} fill="white" />
+                    <span>EXPERIENCIA DOBLE ACTIVA</span>
+                  </div>
+                )}
+                {serverData.hostname.includes('[X5 EXP]') && (
+                  <div className="xp-badge quintuple-xp">
+                    <Star size={16} fill="white" />
+                    <span>¡EXPERIENCIA x5 ACTIVA!</span>
+                  </div>
+                )}
               </div>
-              <div className="card-info">
-                <span className="label">TRIPLEK</span>
-                <span className="sub">YouTube</span>
-              </div>
-            </a>
+            )}
 
-            <a href="#" className="social-card youtube-card" onClick={(e) => { e.preventDefault(); ipcRenderer.send('open-external', 'https://www.youtube.com/@Slnsvc'); }}>
-              <div className="icon-box youtube-bg">
-                <Play size={18} fill="white" />
+            <div className="player-input-group">
+              <div className="input-wrapper">
+                <User size={18} className="input-icon" />
+                <input
+                  type="text"
+                  className="cyber-input"
+                  placeholder="Nombre_Apellido"
+                  value={playerName}
+                  onChange={(e) => {
+                    const newName = e.target.value;
+                    setPlayerName(newName);
+                    ipcRenderer.send('update-player-name', newName);
+                  }}
+                  onBlur={savePlayerName}
+                />
+                <div className="input-border"></div>
               </div>
-              <div className="card-info">
-                <span className="label">SLNS</span>
-                <span className="sub">YouTube</span>
-              </div>
-            </a>
+              <span className="input-hint">Tu identidad en el servidor</span>
+            </div>
 
-            <a href="#" className="social-card youtube-card" onClick={(e) => { e.preventDefault(); ipcRenderer.send('open-external', 'https://www.youtube.com/@DuduuDev'); }}>
-              <div className="icon-box youtube-bg">
-                <Play size={18} fill="white" />
+            <button className="play-btn" onClick={handlePlay}>
+              <div className="btn-content">
+                <Play fill="currentColor" size={24} />
+                <span>JUGAR AHORA</span>
               </div>
-              <div className="card-info">
-                <span className="label">DUDUU DEV</span>
-                <span className="sub">YouTube</span>
-              </div>
-            </a>
-
+              <div className="btn-glow"></div>
+            </button>
           </div>
 
-          <div className="player-input-container">
-            <label>Nombre de Jugador:</label>
-            <input
-              type="text"
-              className="player-name-input"
-              placeholder="Nombre_Apellido"
-              value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
-              onBlur={savePlayerName}
-            />
+
+          <div className="hero-extras">
+            <div className="social-hub animate-fade-in-delayed">
+              {/* Discord Main CTA */}
+              <a href="#" className="social-card discord-card" onClick={(e) => { e.preventDefault(); ipcRenderer.send('open-external', 'https://discord.gg/2ASjB4AHdS'); }}>
+                <div className="icon-box discord-bg">
+                  <svg width="20" height="20" viewBox="0 0 127.14 96.36" fill="white">
+                    <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.11,77.11,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22c2.36-24.44-5.42-48.18-18.9-72.15ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z" />
+                  </svg>
+                </div>
+                <div className="card-info">
+                  <span className="label">Comunidad Oficial</span>
+                  <span className="sub">Discord</span>
+                </div>
+              </a>
+
+              {/* YouTube Channels - Stacked Cards */}
+              <a href="#" className="social-card youtube-card" onClick={(e) => { e.preventDefault(); ipcRenderer.send('open-external', 'https://www.youtube.com/@TRIPLEKYT'); }}>
+                <div className="icon-box youtube-bg">
+                  <Play size={18} fill="white" />
+                </div>
+                <div className="card-info">
+                  <span className="label">TRIPLEK</span>
+                  <span className="sub">YouTube</span>
+                </div>
+              </a>
+
+              <a href="#" className="social-card youtube-card" onClick={(e) => { e.preventDefault(); ipcRenderer.send('open-external', 'https://www.youtube.com/@Slnsvc'); }}>
+                <div className="icon-box youtube-bg">
+                  <Play size={18} fill="white" />
+                </div>
+                <div className="card-info">
+                  <span className="label">SLNS</span>
+                  <span className="sub">YouTube</span>
+                </div>
+              </a>
+
+              <a href="#" className="social-card youtube-card" onClick={(e) => { e.preventDefault(); ipcRenderer.send('open-external', 'https://www.youtube.com/@DuduuDev'); }}>
+                <div className="icon-box youtube-bg">
+                  <Play size={18} fill="white" />
+                </div>
+                <div className="card-info">
+                  <span className="label">DUDUU DEV</span>
+                  <span className="sub">YouTube</span>
+                </div>
+              </a>
+            </div>
+
+            {/* Video Spotlight Component */}
+            <VideoSpotlight />
           </div>
         </header>
 
@@ -212,9 +340,14 @@ const Home = () => {
               style={{ cursor: item.link ? 'pointer' : 'default' }}
             >
               <div
-                className="news-image"
-                style={{ backgroundImage: `linear-gradient(45deg, ${item.startColor || '#1e1b4b'}, ${item.endColor || '#312e81'})` }}
-              />
+                className="news-icon-container"
+                style={{ backgroundImage: `linear-gradient(135deg, ${item.startColor || '#1e1b4b'}, ${item.endColor || '#312e81'})` }}
+              >
+                {/* Icon Logic based on Tag/ID */}
+                {(item.tag === 'NUEVO' || item.tag === 'UPDATE') && <Zap size={32} color="white" style={{ filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.6))' }} />}
+                {(item.tag === 'EVENT' || item.tag === 'EVENTO') && <Gift size={32} color="white" style={{ filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.6))' }} />}
+                {(!['NUEVO', 'UPDATE', 'EVENT', 'EVENTO'].includes(item.tag)) && <Megaphone size={32} color="white" />}
+              </div>
               <div className="news-info">
                 <span className="news-tag">{item.tag}</span>
                 <h3>{item.title}</h3>
@@ -223,7 +356,7 @@ const Home = () => {
             </div>
           ))}
         </section>
-      </div>
+      </div >
 
       <style>{`
         .home-container {
@@ -233,6 +366,7 @@ const Home = () => {
           padding: 40px;
           display: flex;
           flex-direction: column;
+          overflow-y: auto;
         }
 
         .bg-gradient-mesh {
@@ -259,9 +393,27 @@ const Home = () => {
         .hero-section {
           flex: 1;
           display: flex;
+          flex-direction: row; /* Side-by-side layout */
+          justify-content: space-between;
+          align-items: flex-start; /* Align top */
+          gap: 40px;
+          margin-top: 20px;
+        }
+
+        .hero-content {
+          flex: 1;
+          display: flex;
           flex-direction: column;
-          justify-content: center;
           align-items: flex-start;
+          max-width: 600px;
+          padding-top: 40px; /* Center with social hub somewhat */
+        }
+        
+        .hero-extras {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 24px;
         }
 
         .status-badge {
@@ -363,14 +515,11 @@ const Home = () => {
         }
 
         .social-hub {
-          position: absolute;
-          top: 0;
-          right: 0;
-          display: flex;
-          flex-direction: column; 
-          align-items: flex-end; /* Align to right edge */
-          gap: 12px;
-          z-index: 20;
+            display: flex;
+            flex-direction: column; 
+            align-items: flex-end; /* Align to right edge */
+            gap: 12px;
+            /* Removed absolute pos */
         }
 
         .social-card {
@@ -432,73 +581,71 @@ const Home = () => {
            font-weight: 700;
         }
 
-        .social-row {
-           display: flex;
-           gap: 10px;
-        }
-
-        .mini-btn {
-           width: 40px;
-           height: 40px;
-           border-radius: 10px;
-           display: flex;
-           align-items: center;
-           justify-content: center;
-           background: rgba(255, 255, 255, 0.03);
-           border: 1px solid rgba(255, 255, 255, 0.08);
-           color: var(--text-muted);
-           transition: all 0.2s;
-           cursor: pointer;
-        }
-
-        .mini-btn:hover {
-           background: rgba(255, 255, 255, 0.1);
-           transform: translateY(-2px);
-           color: white;
-           box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
-        }
-
-        .yt-btn:hover {
-           color: #ef4444;
-           border-color: rgba(239, 68, 68, 0.3);
-        }
-
         .animate-fade-in-delayed {
             animation: fadeIn 0.8s ease-out 0.2s backwards;
         }
 
-        .player-input-container {
-            margin-top: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
+        /* Premium Input Group */
+        .player-input-group {
+            margin-bottom: 24px; /* Space before button */
             width: 100%;
-            max-width: 300px;
+            max-width: 380px;
         }
 
-        .player-input-container label {
-            font-size: 12px;
-            color: var(--text-muted);
-            font-weight: 600;
-            margin-left: 4px;
-        }
-
-        .player-name-input {
-            background: rgba(255, 255, 255, 0.05);
+        .input-wrapper {
+            position: relative;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            padding: 4px 16px;
             border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 12px 16px;
-            border-radius: 8px;
-            color: white;
-            font-family: inherit;
-            font-weight: 600;
-            transition: all 0.2s;
-            outline: none;
+            transition: all 0.3s ease;
         }
 
-        .player-name-input:focus {
-            background: rgba(255, 255, 255, 0.1);
+        .input-wrapper:focus-within {
+            background: rgba(0, 0, 0, 0.6);
             border-color: var(--accent-primary);
-            box-shadow: 0 0 15px rgba(139, 92, 246, 0.2);
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.15);
+            transform: translateY(-1px);
+        }
+
+        .input-icon {
+            color: var(--text-muted);
+            margin-right: 12px;
+            transition: color 0.3s;
+        }
+
+        .input-wrapper:focus-within .input-icon {
+            color: var(--accent-primary);
+        }
+
+        .cyber-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            padding: 12px 0;
+            outline: none;
+            letter-spacing: 0.5px;
+        }
+        
+        .cyber-input::placeholder {
+            color: rgba(255, 255, 255, 0.3);
+            font-weight: 500;
+        }
+
+        .input-hint {
+            display: block;
+            margin-top: 8px;
+            margin-left: 4px;
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+            opacity: 0.7;
         }
 
         /* News Grid */
@@ -523,13 +670,15 @@ const Home = () => {
           background: rgba(20, 20, 25, 0.9);
         }
 
-        .news-image {
+        .news-icon-container {
           width: 80px;
           height: 80px;
-          border-radius: 8px;
-          background-color: var(--bg-card);
-          background-size: cover;
-          background-position: center;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.2);
         }
 
         .news-info {
@@ -537,6 +686,123 @@ const Home = () => {
           display: flex;
           flex-direction: column;
           justify-content: center;
+        }
+
+        /* Update Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .update-modal {
+            background: #1e1b4b;
+            border: 1px solid var(--accent-primary);
+            padding: 32px;
+            border-radius: 16px;
+            width: 450px;
+            box-shadow: 0 0 50px rgba(99, 102, 241, 0.4);
+            text-align: center;
+            color: white;
+            animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .modal-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .modal-icon {
+            color: var(--accent-primary);
+            width: 48px;
+            height: 48px;
+            filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.6));
+        }
+
+        .modal-header h2 {
+            font-size: 24px;
+            font-weight: 800;
+        }
+
+        .modal-text {
+            color: var(--text-muted);
+            line-height: 1.6;
+            margin-bottom: 32px;
+        }
+        
+        .version-tag {
+            background: rgba(255,255,255,0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #fff;
+            font-weight: 700;
+            margin: 0 6px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+        }
+
+        .btn-cancel {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-cancel:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .btn-confirm {
+            background: var(--accent-primary);
+            border: none;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+            transition: all 0.2s;
+        }
+        .btn-confirm:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 25px rgba(99, 102, 241, 0.6);
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 16px 0;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--accent-primary);
+            border-radius: 4px;
+            transition: width 0.3s ease-out;
+            box-shadow: 0 0 10px var(--accent-primary);
+        }
+        .progress-text {
+            font-weight: 700;
+            color: var(--accent-primary);
         }
 
         .news-tag {
@@ -558,8 +824,63 @@ const Home = () => {
           color: var(--text-muted);
           line-height: 1.4;
         }
+
+        /* XP Bonus Badges */
+        .xp-bonus-container {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 24px;
+        }
+
+        .xp-badge {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 16px;
+          border-radius: 8px;
+          font-weight: 800;
+          font-size: 13px;
+          letter-spacing: 0.5px;
+          color: white;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+          border: 1px solid rgba(255,255,255,0.2);
+          text-transform: uppercase;
+        }
+
+        .double-xp {
+          background: linear-gradient(135deg, #f59e0b, #d97706);
+          text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+          animation: glowPulse 2s infinite;
+        }
+
+        .quintuple-xp {
+          background: linear-gradient(135deg, #ec4899, #be185d);
+          text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+          animation: glowPulseFast 1.5s infinite;
+        }
+
+        @keyframes glowPulse {
+          0% { box-shadow: 0 0 5px rgba(245, 158, 11, 0.5); }
+          50% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.8), 0 0 10px rgba(245, 158, 11, 0.4) inset; }
+          100% { box-shadow: 0 0 5px rgba(245, 158, 11, 0.5); }
+        }
+
+        @keyframes glowPulseFast {
+          0% { box-shadow: 0 0 5px rgba(236, 72, 153, 0.5); }
+          50% { box-shadow: 0 0 25px rgba(236, 72, 153, 0.9), 0 0 12px rgba(236, 72, 153, 0.5) inset; transform: scale(1.02); }
+          100% { box-shadow: 0 0 5px rgba(236, 72, 153, 0.5); }
+        }
+
+        .animate-bounce-subtle {
+           animation: bounceSubtle 3s infinite ease-in-out;
+        }
+        
+        @keyframes bounceSubtle {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
       `}</style>
-    </div>
+    </div >
   );
 };
 

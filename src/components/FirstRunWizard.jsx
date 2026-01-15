@@ -8,6 +8,11 @@ const FirstRunWizard = ({ onComplete }) => {
     const [step, setStep] = useState('selection'); // selection, downloading, extracting, success
     const [downloadProgress, setDownloadProgress] = useState(0);
     const [statusText, setStatusText] = useState('');
+    const [downloadType, setDownloadType] = useState('game'); // 'game' or 'cache'
+
+    // URLS
+    const GAME_URL = "https://launcher.seoul-rp.net/archivos/GTA%20FULL.zip";
+    const CACHE_URL = "https://github.com/Duduuuu-cyber/gta-hub-launcher/releases/download/cache-v1/cacheseoul.zip";
 
     useEffect(() => {
         // Listeners
@@ -18,26 +23,98 @@ const FirstRunWizard = ({ onComplete }) => {
 
         const handleDownloadComplete = async (event, zipPath) => {
             setStep('extracting');
-            setStatusText('DESCOMPRIMIENDO JUEGO...');
-            // Need the app path to extract
-            const appPath = await ipcRenderer.invoke('get-app-path');
-            const targetDir = appPath; // Extract to root or a subfolder? Let's say user wants it "in the launcher root"
+            setStatusText('DESCOMPRIMIENDO...');
 
-            const result = await ipcRenderer.invoke('extract-game', zipPath, targetDir);
-            if (result.success) {
-                // Set path in LS
-                localStorage.setItem('gtapath', targetDir);
-                setStatusText('¡INSTALACIÓN COMPLETADA!');
-                setTimeout(onComplete, 1500);
-            } else {
-                alert('Error al extraer: ' + result.error);
-                setStep('selection');
+            // Determine target based on what we just downloaded
+            if (downloadType === 'game') {
+                const appPath = await ipcRenderer.invoke('get-app-path');
+                const targetDir = appPath;
+
+                const result = await ipcRenderer.invoke('extract-game', zipPath, targetDir);
+                if (result.success) {
+                    let finalGamePath = targetDir;
+
+                    // Verify if gta_sa.exe is in root, or in a subfolder
+                    const fs = window.require('fs');
+                    const path = window.require('path');
+
+                    if (!fs.existsSync(path.join(targetDir, 'gta_sa.exe'))) {
+                        // Not in root, check subdirectories (1 level deep)
+                        try {
+                            const subdirs = fs.readdirSync(targetDir, { withFileTypes: true })
+                                .filter(dirent => dirent.isDirectory())
+                                .map(dirent => dirent.name);
+
+                            for (const subdir of subdirs) {
+                                const subPath = path.join(targetDir, subdir);
+                                if (fs.existsSync(path.join(subPath, 'gta_sa.exe'))) {
+                                    finalGamePath = subPath;
+                                    break;
+                                }
+                            }
+                        } catch (err) {
+                            console.error('Error scanning subdirs:', err);
+                        }
+                    }
+
+                    console.log('Final Game Path detected:', finalGamePath);
+                    localStorage.setItem('gtapath', finalGamePath);
+
+                    // Set Registry
+                    await ipcRenderer.invoke('set-registry-value', 'HKCU\\Software\\SAMP', 'gta_sa_exe', path.join(finalGamePath, 'gta_sa.exe'));
+
+                    // Check for cache immediately after game install? 
+                    // Usually the full game pack includes it, but let's be safe:
+                    const hasCache = await ipcRenderer.invoke('check-cache-exists', finalGamePath);
+                    if (!hasCache) {
+                        setStatusText('JUEGO LISTO. VERIFICANDO CACHÉ...');
+                        setStep('missing_cache');
+                    } else {
+                        setStatusText('¡INSTALACIÓN COMPLETADA!');
+                        setTimeout(onComplete, 1500);
+                    }
+                } else {
+                    alert('Error al extraer juego: ' + result.error);
+                    setStep('selection');
+                }
+            } else if (downloadType === 'cache') {
+                setStatusText('INSTALANDO CACHÉ...');
+                // We are downloading the cache. Target is the game folder.
+                const gamePath = localStorage.getItem('gtapath');
+                if (!gamePath) {
+                    alert('Error crítico: Se perdió la ruta del juego.');
+                    setStep('selection');
+                    return;
+                }
+
+                // Extract to game folder. Result should be gamePath/cacheseoul
+                const result = await ipcRenderer.invoke('extract-game', zipPath, gamePath);
+
+                if (result.success) {
+                    // Configure Cache Path in Settings/Registry
+                    const fullCachePath = gamePath + '\\cacheseoul';
+                    localStorage.setItem('cachepath', fullCachePath);
+
+                    // Set Registry
+                    await ipcRenderer.invoke('set-registry-value', 'HKCU\\Software\\SAMP', 'model_cache', fullCachePath);
+
+                    setStatusText('¡CACHÉ INSTALADA CORRECTAMENTE!');
+                    setTimeout(onComplete, 1500);
+                } else {
+                    alert('Error al extraer cache: ' + result.error);
+                    setStep('missing_cache');
+                }
             }
         };
 
         const handleError = (event, error) => {
             alert('Error en descarga: ' + error);
-            setStep('selection');
+            // If cache failed, go back to missing_cache, else selection
+            if (downloadType === 'cache') {
+                setStep('missing_cache');
+            } else {
+                setStep('selection');
+            }
         };
 
         ipcRenderer.on('download-progress', handleProgress);
@@ -49,16 +126,30 @@ const FirstRunWizard = ({ onComplete }) => {
             ipcRenderer.removeListener('download-complete', handleDownloadComplete);
             ipcRenderer.removeListener('download-error', handleError);
         }
-    }, [onComplete]);
+    }, [onComplete, downloadType]);
 
     const handleLocate = async () => {
         const path = await ipcRenderer.invoke('select-directory', 'Selecciona tu carpeta GTA San Andreas');
         if (path) {
-            // Verify
+            // Verify gta_sa.exe
             const isValid = await ipcRenderer.invoke('check-game-files', path);
             if (isValid) {
-                localStorage.setItem('gtapath', path);
-                onComplete();
+                // Verify cacheseoul
+                const hasCache = await ipcRenderer.invoke('check-cache-exists', path);
+
+                if (!hasCache) {
+                    localStorage.setItem('gtapath', path);
+                    // Also set Registry so game works immediately
+                    const exePath = path + '\\gta_sa.exe';
+                    await ipcRenderer.invoke('set-registry-value', 'HKCU\\Software\\SAMP', 'gta_sa_exe', exePath);
+                    setStep('missing_cache');
+                } else {
+                    localStorage.setItem('gtapath', path);
+                    // Also set Registry
+                    const exePath = path + '\\gta_sa.exe';
+                    await ipcRenderer.invoke('set-registry-value', 'HKCU\\Software\\SAMP', 'gta_sa_exe', exePath);
+                    onComplete();
+                }
             } else {
                 alert('Esa carpeta no parece contener un GTA San Andreas válido (falta gta_sa.exe).');
             }
@@ -66,14 +157,23 @@ const FirstRunWizard = ({ onComplete }) => {
     };
 
     const handleDownload = async () => {
+        setDownloadType('game');
         setStep('downloading');
-        // Real URL provided by user
-        const GAME_URL = "https://launcher.seoul-rp.net/archivos/GTA_FULL.zip";
 
         const appPath = await ipcRenderer.invoke('get-app-path');
         const zipTarget = appPath + '\\gta_temp.zip';
 
         ipcRenderer.send('download-game-start', GAME_URL, zipTarget);
+    };
+
+    const handleCacheDownload = async () => {
+        setDownloadType('cache');
+        setStep('downloading');
+
+        const appPath = await ipcRenderer.invoke('get-app-path');
+        const zipTarget = appPath + '\\cache_temp.zip';
+
+        ipcRenderer.send('download-game-start', CACHE_URL, zipTarget);
     };
 
     return (
@@ -146,7 +246,64 @@ const FirstRunWizard = ({ onComplete }) => {
                             <span className="percent-text">{Math.round(downloadProgress)}%</span>
                         </div>
 
+                        {step === 'downloading' && (
+                            <motion.button
+                                className="cancel-button"
+                                whileHover={{ scale: 1.05, color: "#ef4444" }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => {
+                                    ipcRenderer.send('download-game-cancel');
+                                    setStep('selection');
+                                    setDownloadProgress(0);
+                                }}
+                            >
+                                Cancelar Descarga
+                            </motion.button>
+                        )}
+
                         <p className="sub-text-warning">Por favor no cierres el launcher. Esto puede tomar unos minutos.</p>
+                    </motion.div>
+                )}
+
+                {step === 'missing_cache' && (
+                    <motion.div
+                        className="cache-view"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                    >
+                        <div className="alert-icon-wrapper">
+                            <HardDrive size={48} color="#fbbf24" />
+                        </div>
+                        <h2>¿DESCARGAR CACHÉ?</h2>
+                        <p>No encontramos la carpeta oficial <code>cacheseoul</code>. ¿Quieres descargarla para ver los modelos personalizados?</p>
+
+                        <div className="cache-actions">
+                            <motion.button
+                                className="primary-btn"
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={handleCacheDownload}
+                            >
+                                <Download size={20} />
+                                SÍ, DESCARGAR (RECOMENDADO)
+                            </motion.button>
+
+                            <button
+                                className="secondary-btn"
+                                onClick={() => {
+                                    // User skips cache download
+                                    // Just finish config with what they have
+                                    const gtaPath = localStorage.getItem('gtapath');
+                                    if (gtaPath) {
+                                        onComplete();
+                                    } else {
+                                        setStep('selection');
+                                    }
+                                }}
+                            >
+                                NO GRACIAS, OMITIR
+                            </button>
+                        </div>
                     </motion.div>
                 )}
             </motion.div>
@@ -318,6 +475,97 @@ const FirstRunWizard = ({ onComplete }) => {
                 }
 
                 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+                .cancel-button {
+                    background: transparent;
+                    border: 1px solid rgba(255,255,255,0.2);
+                    color: rgba(255,255,255,0.7);
+                    padding: 8px 16px;
+                    border-radius: 20px;
+                    margin-top: 20px;
+                    cursor: pointer;
+                    font-size: 13px;
+                    transition: all 0.2s;
+                }
+                
+                .cancel-button:hover {
+                    border-color: #ef4444; 
+                    background: rgba(239, 68, 68, 0.1);
+                }
+
+                /* Cache View */
+                .cache-view {
+                    text-align: center;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 20px;
+                }
+                
+                .alert-icon-wrapper {
+                    background: rgba(251, 191, 36, 0.1);
+                    padding: 20px;
+                    border-radius: 50%;
+                    border: 1px solid rgba(251, 191, 36, 0.2);
+                    box-shadow: 0 0 30px rgba(251, 191, 36, 0.2);
+                }
+
+                .cache-view h2 {
+                    font-size: 24px;
+                    margin: 0;
+                }
+                
+                .cache-view p {
+                    color: #94a3b8;
+                    max-width: 400px;
+                    line-height: 1.5;
+                }
+                
+                .cache-view code {
+                    background: rgba(0,0,0,0.3);
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    color: #fbbf24;
+                    font-family: monospace;
+                }
+
+                .cache-actions {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                    width: 100%;
+                    margin-top: 10px;
+                }
+
+                .primary-btn {
+                    background: linear-gradient(135deg, #fbbf24, #d97706);
+                    border: none;
+                    border-radius: 12px;
+                    padding: 16px;
+                    color: black;
+                    font-weight: 700;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                    cursor: pointer;
+                    width: 100%;
+                }
+
+                .secondary-btn {
+                    background: transparent;
+                    border: 1px solid rgba(255,255,255,0.1);
+                    color: rgba(255,255,255,0.5);
+                    padding: 12px;
+                    border-radius: 12px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                }
+                
+                .secondary-btn:hover {
+                    background: rgba(255,255,255,0.05);
+                    color: white;
+                }
             `}</style>
         </div>
     );

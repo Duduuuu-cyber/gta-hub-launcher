@@ -11,13 +11,68 @@ import { exec } from 'child_process'
 import fs from 'fs'
 import https from 'https'
 import AdmZip from 'adm-zip'
+import DiscordRPC from 'discord-rpc'
+
+const DISCORD_CLIENT_ID = '1461428328085852315'; // REPLACE THIS WITH YOUR ACTUAL DISCORD CLIENT ID from https://discord.com/developers/applications
+let rpcClient;
+let isRpcEnabled = false;
+let currentPlayerName = '';
 
 process.env.DIST = join(__dirname, '../dist_build')
 process.env.PUBLIC = app.isPackaged ? process.env.DIST : join(__dirname, '../public')
 
 // Auto-Updater Config
-autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoDownload = false; // Disable auto download to ask user first
+autoUpdater.autoInstallOnAppQuit = false;
+
+// Updater Events
+const sendStatusToWindow = (text) => {
+    if (win) {
+        win.webContents.send('update-status', text);
+    }
+};
+
+autoUpdater.on('checking-for-update', () => {
+    sendStatusToWindow('Buscando actualizaciones...');
+});
+
+autoUpdater.on('update-available', (info) => {
+    sendStatusToWindow(`Actualización disponible: ${info.version}`);
+    if (win) {
+        win.webContents.send('update-available-prompt', info);
+    }
+});
+
+autoUpdater.on('update-not-available', (info) => {
+    sendStatusToWindow('No hay actualizaciones disponibles.');
+});
+
+autoUpdater.on('error', (err) => {
+    sendStatusToWindow(`Error en auto-updater: ${err}`);
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+    let log_message = "Descargando: " + Math.round(progressObj.percent) + '%';
+    sendStatusToWindow(log_message);
+    if (win) {
+        win.webContents.send('update-download-progress', progressObj.percent);
+    }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+    sendStatusToWindow('Actualización descargada. Lista para instalar.');
+    if (win) {
+        win.webContents.send('update-ready-to-install', info);
+    }
+});
+
+ipcMain.on('start-download-update', () => {
+    autoUpdater.downloadUpdate();
+});
+
+ipcMain.on('install-update-now', () => {
+    autoUpdater.quitAndInstall();
+});
 
 // SAMP Query Helper
 function querySampServer(ip, port) {
@@ -42,16 +97,41 @@ function querySampServer(ip, port) {
                 if (msg.toString('ascii', 0, 4) !== 'SAMP') return
 
                 // Parse 'i' response (SAMP seems to use BE for these fields or network order)
-                let offset = 11
-                const players = msg.readUInt16BE(offset)
-                offset += 2
-                const maxPlayers = msg.readUInt16BE(offset)
+                // Parse 'i' response
+                // Header (SAMP + IP + Port + 'i') is 11 bytes (0-10)
+                let offset = 11;
 
-                socket.close()
-                resolve({ online: true, players, maxPlayers })
+                // 1. Password (1 byte)
+                const password = msg.readUInt8(offset);
+                offset += 1;
+
+                // 2. Players (2 bytes LE)
+                const players = msg.readUInt16LE(offset);
+                offset += 2;
+
+                // 3. Max Players (2 bytes LE)
+                const maxPlayers = msg.readUInt16LE(offset);
+                offset += 2;
+
+                // 4. Hostname Length (4 bytes LE)
+                const hostnameLen = msg.readUInt32LE(offset);
+                offset += 4;
+
+                // 5. Hostname
+                let hostname = '';
+                if (hostnameLen > 0) {
+                    // iconv-lite could be used here for different encodings, 
+                    // but for now we assume standard Windows-1252 or similar, approximated by latin1 or utf8
+                    hostname = msg.toString('latin1', offset, offset + hostnameLen);
+                    offset += hostnameLen;
+                }
+
+                socket.close();
+                resolve({ online: true, players, maxPlayers, hostname });
             } catch (e) {
-                socket.close()
-                resolve({ online: false, players: 0, maxPlayers: 0 })
+                console.error('SAMP Parse Error:', e);
+                socket.close();
+                resolve({ online: false, players: 0, maxPlayers: 0, hostname: '' });
             }
         })
 
@@ -92,6 +172,7 @@ function createWindow() {
         minHeight: 700,
         frame: false, // Frameless for custom UI
         backgroundColor: '#0f0f13', // Dark background to avoid white flash
+        icon: join(__dirname, '../src/assets/Logo_Seoul_Prueba_8.png'),
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false, // For simple IPC demo, can be tightened later
@@ -123,7 +204,7 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(() => {
-    autoUpdater.checkForUpdatesAndNotify();
+    autoUpdater.checkForUpdates();
     createWindow()
 
     // Window Controls IPC
@@ -144,6 +225,54 @@ app.whenReady().then(() => {
         win?.close()
     })
 
+    // Discord RPC Toggle IPC
+    ipcMain.on('toggle-discord-rpc', (event, enabled) => {
+        isRpcEnabled = enabled;
+        if (enabled) {
+            if (!rpcClient) {
+                const rpc = new DiscordRPC.Client({ transport: 'ipc' });
+
+                rpc.on('ready', () => {
+                    console.log('Discord RPC Connected');
+                });
+
+                // Prevent crash on connection errors
+                rpc.transport.on('close', () => {
+                    console.log('Discord RPC Connection Closed');
+                    rpcClient = null;
+                });
+
+                rpc.login({ clientId: DISCORD_CLIENT_ID }).catch((err) => {
+                    console.error('Failed to connect to Discord RPC:', err);
+                    rpcClient = null;
+                });
+
+                rpcClient = rpc;
+            }
+        } else {
+            if (rpcClient) {
+                try {
+                    rpcClient.clearActivity().catch(() => { });
+                    rpcClient.destroy().catch(() => { });
+                } catch (e) {
+                    console.error('Error destroying RPC client:', e);
+                }
+                rpcClient = null;
+            }
+        }
+    });
+
+    // Update Player Name for RPC
+    ipcMain.on('update-player-name', (event, name) => {
+        currentPlayerName = name;
+        if (isRpcEnabled && rpcClient) {
+            // Force refresh status if connected
+            // We can trigger a quick update or wait for next poll
+            // Let's trigger a quick "Idle" update if server checks are failing, 
+            // but ideally the next polling cycle handles it. 
+        }
+    });
+
     // SAMP Server Query IPC
     ipcMain.on('get-server-info', async (event) => {
         // IP: samp.seoul-rp.net resolves to some IP, but we need the actual IP for UDP packet usually. 
@@ -159,6 +288,30 @@ app.whenReady().then(() => {
             console.log('Resolved IP:', result.address);
             const data = await querySampServer(result.address, 7777);
             console.log('Query result:', data);
+
+            // Update Discord RPC if enabled
+            if (isRpcEnabled && rpcClient) {
+                const nameDisplay = currentPlayerName ? ` | Jugando como: ${currentPlayerName}` : '';
+
+                if (data.online) {
+                    rpcClient.setActivity({
+                        details: `Jugando GTA Seoul Roleplay${nameDisplay}`,
+                        state: `${data.players} de ${data.maxPlayers} Jugadores Online`,
+                        largeImageKey: 'logo',
+                        largeImageText: 'GTA Seoul Launcher',
+                        instance: false,
+                    }).catch(console.error);
+                } else {
+                    rpcClient.setActivity({
+                        details: 'Jugando GTA Seoul',
+                        state: currentPlayerName ? `Usuario: ${currentPlayerName}` : 'En el Launcher',
+                        largeImageKey: 'logo',
+                        largeImageText: 'GTA Seoul Launcher',
+                        instance: false,
+                    }).catch(console.error);
+                }
+            }
+
             event.reply('server-info-reply', data);
         } catch (e) {
             console.error('SAMP Query Error:', e);
@@ -249,22 +402,38 @@ app.whenReady().then(() => {
         }
     })
 
-    // --- SAMP Config Handlers (Fix for Settings Page) ---
+    // --- SAMP Config Handlers ---
+    const getSampConfigPath = () => {
+        return join(app.getPath('documents'), 'GTA San Andreas User Files', 'SAMP', 'sa-mp.cfg');
+    };
+
     ipcMain.handle('read-samp-config', async () => {
         try {
-            // Usually in Documents/GTA San Andreas User Files/SAMP/sa-mp.cfg
-            // For now, we return empty or try to find it. 
-            // Simplifying: return null/empty to stop error, or implement proper read if path known.
-            // As a fallback to prevent error:
+            const configPath = getSampConfigPath();
+            if (fs.existsSync(configPath)) {
+                return fs.readFileSync(configPath, 'utf-8');
+            }
             return '';
         } catch (e) {
+            console.error('Error reading sa-mp.cfg:', e);
             return '';
         }
     });
 
     ipcMain.handle('write-samp-config', async (event, content) => {
-        // Placeholder implementation
-        return true;
+        try {
+            const configPath = getSampConfigPath();
+            // Ensure directory exists
+            const dir = dirname(configPath);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            fs.writeFileSync(configPath, content, 'utf-8');
+            return true;
+        } catch (e) {
+            console.error('Error writing sa-mp.cfg:', e);
+            return false;
+        }
     });
 
     // --- First Run Wizard IPC ---
@@ -305,43 +474,172 @@ app.whenReady().then(() => {
         }
     });
 
+    // Global reference for download cancellation
+    let activeDownloadRequest = null;
+
     // Download Game
     ipcMain.on('download-game-start', (event, url, targetPath) => {
-        const file = fs.createWriteStream(targetPath);
+        const startDownload = (downloadUrl, redirectCount = 0) => {
+            console.log(`[DEBUG] Starting download from: ${downloadUrl} (Redirects: ${redirectCount})`);
 
-        https.get(url, (response) => {
-            const total = parseInt(response.headers['content-length'], 10);
-            let cur = 0;
+            if (redirectCount > 10) {
+                event.sender.send('download-error', 'Too many redirects.');
+                return;
+            }
 
-            response.on('data', (chunk) => {
-                cur += chunk.length;
-                file.write(chunk);
-                // Send progress (0-100)
-                const percent = (cur / total) * 100;
-                event.sender.send('download-progress', percent);
+            activeDownloadRequest = https.get(downloadUrl, (response) => {
+                console.log('[DEBUG] Response Status:', response.statusCode);
+
+                // Handle Redirects (301, 302, 307, 308)
+                if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                    console.log('[DEBUG] Redirect detected to:', response.headers.location);
+                    response.resume(); // Consume/discard response data to free socket
+                    startDownload(response.headers.location, redirectCount + 1);
+                    return;
+                }
+
+                if (response.statusCode !== 200) {
+                    event.sender.send('download-error', `Server returned error ${response.statusCode}`);
+                    return;
+                }
+
+                // Prepare file stream
+                const file = fs.createWriteStream(targetPath);
+                const total = parseInt(response.headers['content-length'], 10);
+                let cur = 0;
+
+                response.on('data', (chunk) => {
+                    cur += chunk.length;
+                    file.write(chunk);
+                    // Send progress (0-100)
+                    if (total) {
+                        const percent = (cur / total) * 100;
+                        event.sender.send('download-progress', percent);
+                    }
+                });
+
+                response.on('end', () => {
+                    file.end();
+                    console.log('[DEBUG] Download finished.');
+                    event.sender.send('download-complete', targetPath);
+                    activeDownloadRequest = null;
+                });
+
+                response.on('error', (err) => {
+                    file.close();
+                    fs.unlink(targetPath, () => { });
+                    event.sender.send('download-error', err.message);
+                });
             });
 
-            response.on('end', () => {
-                file.close();
-                event.sender.send('download-complete', targetPath);
+            activeDownloadRequest.on('error', (err) => {
+                console.error('[DEBUG] Request error:', err);
+                event.sender.send('download-error', err.message);
             });
-        }).on('error', (err) => {
-            fs.unlink(targetPath, () => { }); // Delete partial file
-            event.sender.send('download-error', err.message);
-        });
+        };
+
+        startDownload(url);
+    });
+
+    ipcMain.on('download-game-cancel', () => {
+        if (activeDownloadRequest) {
+            console.log('[DEBUG] Cancelling download...');
+            activeDownloadRequest.destroy();
+            activeDownloadRequest = null;
+        }
     });
 
     // Extract Game
+    // Extract Game (PowerShell method to handle >2GB files)
     ipcMain.handle('extract-game', async (event, zipPath, targetDir) => {
+        return new Promise((resolve, reject) => {
+            console.log('[DEBUG] Starting extraction via PowerShell:', zipPath);
+            const { spawn } = require('child_process');
+
+            // Expand-Archive -LiteralPath '...' -DestinationPath '...' -Force
+            const ps = spawn('powershell.exe', [
+                '-NoProfile',
+                '-ExecutionPolicy', 'Bypass',
+                '-Command',
+                `Expand-Archive -LiteralPath "${zipPath}" -DestinationPath "${targetDir}" -Force`
+            ]);
+
+            ps.stdout.on('data', (data) => {
+                console.log(`[PS stdout]: ${data}`);
+            });
+
+            ps.stderr.on('data', (data) => {
+                console.error(`[PS stderr]: ${data}`);
+            });
+
+            ps.on('close', (code) => {
+                if (code === 0) {
+                    console.log('[DEBUG] Extraction successful');
+                    try {
+                        const fs = require('fs');
+                        if (fs.existsSync(zipPath)) {
+                            fs.unlinkSync(zipPath); // Delete zip after success
+                        }
+                    } catch (e) {
+                        console.warn('Could not delete zip:', e);
+                    }
+                    resolve({ success: true });
+                } else {
+                    console.error('[DEBUG] Extraction failed with code:', code);
+                    resolve({ success: false, error: 'Extraction process exited with code ' + code });
+                }
+            });
+
+            ps.on('error', (err) => {
+                console.error('[DEBUG] Failed to start PowerShell:', err);
+                resolve({ success: false, error: err.message });
+            });
+        });
+    });
+
+    // Clear Model Cache
+    ipcMain.handle('clear-model-cache', async (event, cachePath) => {
         try {
-            const zip = new AdmZip(zipPath);
-            zip.extractAllTo(targetDir, true);
-            // Cleanup zip
-            fs.unlinkSync(zipPath);
-            return { success: true };
+            if (fs.existsSync(cachePath)) {
+                // Remove recursive
+                fs.rmSync(cachePath, { recursive: true, force: true });
+                return true;
+            }
+            return false;
         } catch (e) {
-            console.error(e);
-            return { success: false, error: e.message };
+            console.error('Error clearing cache:', e);
+            return false;
+        }
+    });
+
+    // Delete gta_sa.set
+    ipcMain.handle('delete-gta-set', async () => {
+        try {
+            // usually in Documents/GTA San Andreas User Files/gta_sa.set
+            const documentsPath = app.getPath('documents');
+            const gtaSetPath = join(documentsPath, 'GTA San Andreas User Files', 'gta_sa.set');
+
+            if (fs.existsSync(gtaSetPath)) {
+                fs.unlinkSync(gtaSetPath);
+                return true;
+            }
+            return false;
+        } catch (e) {
+            console.error('Error deleting gta_sa.set:', e);
+            return false;
+        }
+    });
+
+    // Check Cache Exists
+    ipcMain.handle('check-cache-exists', async (event, gamePath) => {
+        try {
+            const cachePath = join(gamePath, 'cacheseoul');
+            const exists = fs.existsSync(cachePath);
+            console.log(`[DEBUG] Checking for cacheseoul in ${gamePath}: ${exists}`);
+            return exists;
+        } catch (e) {
+            console.error('[DEBUG] Error checking cache:', e);
+            return false;
         }
     });
 

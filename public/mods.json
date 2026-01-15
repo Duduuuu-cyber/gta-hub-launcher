@@ -1,0 +1,18 @@
+[
+    {
+        "id": "modloader",
+        "name": "ModLoader 0.3.8",
+        "description": "Herramienta esencial para instalar mods sin reemplazar archivos originales. ¡Necesario!",
+        "imageUrl": "./mods/modloader.png",
+        "downloadUrl": "https://launcher.seoul-rp.net/mods/modloader.zip",
+        "category": "Core"
+    },
+    {
+        "id": "cleo4",
+        "name": "CLEO 4 Library",
+        "description": "Librería base para ejecutar scripts y mods avanzados en GTA SA.",
+        "imageUrl": "./mods/cleo.png",
+        "downloadUrl": "https://launcher.seoul-rp.net/mods/cleo4.zip",
+        "category": "Core"
+    }
+]

@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { HashRouter as Router, Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { Home as HomeIcon, Settings as SettingsIcon, Server, Shield } from 'lucide-react'
+import { Home as HomeIcon, Settings as SettingsIcon, Server, Shield, Package } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
+import logoSeoul from './assets/Logo_Seoul_Prueba_8.png'
 import TitleBar from './components/TitleBar'
 import Home from './pages/Home'
 import Settings from './pages/Settings'
+import Mods from './pages/Mods'
 import SplashScreen from './components/SplashScreen'
 import FirstRunWizard from './components/FirstRunWizard'
 
@@ -16,7 +18,7 @@ const Sidebar = () => {
   return (
     <div className="sidebar">
       <div className="logo-area">
-        <div className="logo-icon">GS</div>
+        <img src={logoSeoul} alt="GTASeoul" className="logo-img" />
         <span>GTASeoul</span>
       </div>
 
@@ -25,6 +27,11 @@ const Sidebar = () => {
           <HomeIcon size={20} />
           <span>Inicio</span>
           {location.pathname === '/' && <div className="active-indicator" />}
+        </NavLink>
+        <NavLink to="/mods" className="nav-item">
+          <Package size={20} />
+          <span>Mods</span>
+          {location.pathname === '/mods' && <div className="active-indicator" />}
         </NavLink>
         <NavLink to="/settings" className="nav-item">
           <SettingsIcon size={20} />
@@ -63,18 +70,10 @@ function App() {
         console.log('[DEBUG-RENDERER] Setup OK. Path:', path);
         setNeedsSetup(false);
       } else {
-        // Not configured or invalid? Check local dir (Auto-Detect)
-        console.log('[DEBUG-RENDERER] Checking local auto-detect...');
-        const localPath = await ipcRenderer.invoke('check-local-game');
-        console.log('[DEBUG-RENDERER] Auto-detect found:', localPath);
-
-        if (localPath) {
-          localStorage.setItem('gtapath', localPath);
-          setNeedsSetup(false);
-        } else {
-          console.log('[DEBUG-RENDERER] SETTING NEEDS SETUP TO TRUE');
-          setNeedsSetup(true);
-        }
+        // If not configured in localStorage, ALWAYS show wizard so user can choose
+        // checking local auto-detect is fine for hints, but we won't auto-apply it.
+        console.log('[DEBUG-RENDERER] No localStorage path. Enforcing Wizard.');
+        setNeedsSetup(true);
       }
     };
     checkSetup();
@@ -99,6 +98,7 @@ function App() {
               <div className="page-content">
                 <Routes>
                   <Route path="/" element={<Home />} />
+                  <Route path="/mods" element={<Mods />} />
                   <Route path="/settings" element={<Settings />} />
                 </Routes>
               </div>

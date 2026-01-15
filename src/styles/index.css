@@ -116,19 +116,19 @@ body {
   z-index: 40;
 }
 
-.logo-icon {
-  width: 48px;
-  height: 48px;
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+.logo-img {
+  width: 54px;
+  height: 54px;
   border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 900;
-  font-size: 20px;
-  color: white;
-  margin-bottom: 20px;
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+  object-fit: contain;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 0 10px rgba(139, 92, 246, 0.4));
+  transition: transform 0.3s;
+}
+
+.logo-img:hover {
+  transform: scale(1.05);
+  filter: drop-shadow(0 0 15px rgba(139, 92, 246, 0.6));
 }
 
 .logo-area span {
