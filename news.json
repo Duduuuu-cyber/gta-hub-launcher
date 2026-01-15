@@ -1,19 +1,20 @@
 [
     {
-        "id": 1,
-        "tag": "UPDATE",
-        "title": "CAMBIOS MARRONES",
-        "description": "Se han realizado los siguientes cambios:",
-        "startColor": "#1e1b4b",
-        "endColor": "#312e81",
-        "link": "https://your-link.com"
+        "id": "launcher_release",
+        "tag": "NUEVO",
+        "title": "NUEVO LAUNCHER OFICIAL 2.0",
+        "description": "¡Diseño totalmente renovado! Instalación automática, gestión de caché y modo premium.",
+        "startColor": "#4f46e5",
+        "endColor": "#7c3aed",
+        "link": "https://discord.gg/seoulrp"
     },
     {
-        "id": 2,
-        "tag": "EVENT",
-        "title": "EVENTO MARRON",
-        "description": "Se han realizado los siguientes cambios:",
-        "startColor": "#831843",
-        "endColor": "#9d174d"
+        "id": "launch_event",
+        "tag": "EVENTO",
+        "title": "FIESTA DE LANZAMIENTO",
+        "description": "Celebra la llegada del nuevo launcher con XP Doble y sorteos exclusivos en el servidor.",
+        "startColor": "#be123c",
+        "endColor": "#fb7185",
+        "link": "https://discord.gg/seoulrp"
     }
 ]
