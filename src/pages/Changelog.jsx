@@ -8,6 +8,16 @@ const Changelog = () => {
     // Example data - normally this would fetch from a JSON
     const [changes] = useState([
         {
+            version: '1.0.8',
+            date: '16 Enero 2026',
+            features: [
+                { type: 'new', text: 'Protección Total: El juego ahora se instala en Documentos para evitar borrados al actualizar.' },
+                { type: 'new', text: 'Auto-Recuperación: El launcher detecta automáticamente tu instalación si pierdes la configuración.' },
+                { type: 'fix', text: 'ModLoader ahora es 100% funcional y compatible con la descarga automática.' },
+                { type: 'fix', text: 'Mejoras visuales y correcciones menores en la interfaz.' }
+            ]
+        },
+        {
             version: '1.0.7',
             date: '15 Enero 2026',
             features: [

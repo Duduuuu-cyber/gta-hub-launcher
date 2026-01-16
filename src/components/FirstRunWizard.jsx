@@ -27,8 +27,12 @@ const FirstRunWizard = ({ onComplete }) => {
 
             // Determine target based on what we just downloaded
             if (downloadType === 'game') {
-                const appPath = await ipcRenderer.invoke('get-app-path');
-                const targetDir = appPath;
+                // Use the path where we downloaded the zip (which is now the safe path parent ideally, or we extract TO the safe path)
+                // Actually, handleDownload now puts the zip in a temp location, but we want to extract TO the safe path.
+
+                // Fetch the safe path again to be sure where we are installing
+                const targetDir = await ipcRenderer.invoke('get-safe-game-path');
+                console.log('Extracting to safe path:', targetDir);
 
                 const result = await ipcRenderer.invoke('extract-game', zipPath, targetDir);
                 if (result.success) {
@@ -160,8 +164,9 @@ const FirstRunWizard = ({ onComplete }) => {
         setDownloadType('game');
         setStep('downloading');
 
-        const appPath = await ipcRenderer.invoke('get-app-path');
-        const zipTarget = appPath + '\\gta_temp.zip';
+        // Get safe path for installation
+        const safePath = await ipcRenderer.invoke('get-safe-game-path');
+        const zipTarget = safePath + '\\gta_temp.zip'; // Download zip INSIDE the safe folder
 
         ipcRenderer.send('download-game-start', GAME_URL, zipTarget);
     };
@@ -170,8 +175,8 @@ const FirstRunWizard = ({ onComplete }) => {
         setDownloadType('cache');
         setStep('downloading');
 
-        const appPath = await ipcRenderer.invoke('get-app-path');
-        const zipTarget = appPath + '\\cache_temp.zip';
+        const safePath = await ipcRenderer.invoke('get-safe-game-path');
+        const zipTarget = safePath + '\\cache_temp.zip';
 
         ipcRenderer.send('download-game-start', CACHE_URL, zipTarget);
     };

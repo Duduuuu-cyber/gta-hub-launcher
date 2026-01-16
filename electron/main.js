@@ -500,24 +500,71 @@ app.whenReady().then(() => {
     })
 
     // Check if game exists in THE LAUNCHER'S OWN DIRECTORY (Auto-detect)
+    // AND check safe locations (Documents/GTA Seoul, C:/Games/GTA Seoul)
     ipcMain.handle('check-local-game', async () => {
         console.log('[DEBUG] Starting Auto-detect check...');
         try {
-            // Check where the app is running
+            // 1. Check App Dir (Legacy)
             let appDir = app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath();
-            console.log('[DEBUG] App Dir:', appDir);
-
-            const exePath = join(appDir, 'gta_sa.exe');
-            const exists = fs.existsSync(exePath);
-            console.log('[DEBUG] Local gta_sa.exe found?', exists);
-
-            if (exists) {
+            // In dev mode, app.getAppPath() points to source root. 
+            // We might want to check if gta_sa.exe is there.
+            if (fs.existsSync(join(appDir, 'gta_sa.exe'))) {
+                console.log('[DEBUG] Found in App Dir:', appDir);
                 return appDir;
             }
+
+            // 2. Check Documents/GTA Seoul
+            const docPath = join(app.getPath('documents'), 'GTA Seoul');
+            if (fs.existsSync(join(docPath, 'gta_sa.exe'))) {
+                console.log('[DEBUG] Found in Documents:', docPath);
+                return docPath;
+            }
+
+            // 3. Check C:/Games/GTA Seoul
+            const globalPath = 'C:\\Games\\GTA Seoul';
+            if (fs.existsSync(join(globalPath, 'gta_sa.exe'))) {
+                console.log('[DEBUG] Found in C:/Games:', globalPath);
+                return globalPath;
+            }
+
+            console.log('[DEBUG] Game not found in standard locations.');
             return null;
         } catch (e) {
             console.error('[DEBUG] Auto-detect error:', e);
             return null;
+        }
+    });
+
+    // Get Safe Game Path for Installation
+    ipcMain.handle('get-safe-game-path', async () => {
+        try {
+            // Priority 1: Documents/GTA Seoul
+            const docPath = join(app.getPath('documents'), 'GTA Seoul');
+            try {
+                if (!fs.existsSync(docPath)) fs.mkdirSync(docPath, { recursive: true });
+                // Test write permission just in case
+                fs.accessSync(docPath, fs.constants.W_OK);
+                console.log('[DEBUG] Using Safe Path (Documents):', docPath);
+                return docPath;
+            } catch (docErr) {
+                console.warn('[WARN] Could not use Documents path:', docErr.message);
+            }
+
+            // Priority 2: C:/Games/GTA Seoul
+            const globalPath = 'C:\\Games\\GTA Seoul';
+            try {
+                if (!fs.existsSync(globalPath)) fs.mkdirSync(globalPath, { recursive: true });
+                console.log('[DEBUG] Using Safe Path (Global):', globalPath);
+                return globalPath;
+            } catch (globalErr) {
+                console.error('[ERROR] Could not use Global path:', globalErr.message);
+            }
+
+            // Fallback: App Data (Least desirable but better than crash)
+            return app.getPath('userData');
+        } catch (e) {
+            console.error('Critical Error getting safe path:', e);
+            throw e;
         }
     });
 

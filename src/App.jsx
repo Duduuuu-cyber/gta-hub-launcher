@@ -101,6 +101,22 @@ function App() {
         setNeedsSetup(false);
       } else {
         console.log('[DEBUG-RENDERER] Enforcing Wizard (No path OR No Setup Flag).');
+
+        // LAST RESORT: Try to auto-detect game (e.g. from Documents/GTA Seoul) to restore session
+        // This handles the "Update wiped my config" or "Reinstall" scenario
+        const detectedPath = await ipcRenderer.invoke('check-local-game');
+        if (detectedPath) {
+          console.log('[DEBUG-RENDERER] Auto-detected game at:', detectedPath);
+          const isValid = await ipcRenderer.invoke('check-game-files', detectedPath);
+          if (isValid) {
+            console.log('[DEBUG-RENDERER] Auto-detection Validated! Restoring session.');
+            localStorage.setItem('gtapath', detectedPath);
+            localStorage.setItem('setup_completed', 'true');
+            setNeedsSetup(false);
+            return;
+          }
+        }
+
         setNeedsSetup(true);
       }
     };

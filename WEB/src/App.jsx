@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { Download, Shield, Zap, Terminal, Globe, ChevronRight, Star, History, Package } from 'lucide-react';
 import logoSeoul from './assets/Logo_Seoul_Prueba_8.png';
+import launcherPreview from './assets/launcher-preview.png';
 
 /* Components */
 const Navbar = () => (
@@ -40,6 +41,29 @@ function App() {
   const y1 = useTransform(scrollY, [0, 500], [0, 200]);
   const y2 = useTransform(scrollY, [0, 500], [0, -150]);
 
+  const [version, setVersion] = useState('v1.0.8');
+  const [downloadUrl, setDownloadUrl] = useState('https://github.com/Duduuuu-cyber/gta-hub-launcher/releases/latest/download/GTASeoul.Launcher-Setup-1.0.8.exe');
+
+  useEffect(() => {
+    fetch('https://api.github.com/repos/Duduuuu-cyber/gta-hub-launcher/releases/latest')
+      .then(res => res.json())
+      .then(data => {
+        if (data.tag_name) {
+          setVersion(data.tag_name);
+          // Try to find the exe asset
+          const exeAsset = data.assets?.find(a => a.name.endsWith('.exe'));
+          if (exeAsset) {
+            setDownloadUrl(exeAsset.browser_download_url);
+          } else {
+            // Fallback construction
+            const vNum = data.tag_name.replace('v', '');
+            setDownloadUrl(`https://github.com/Duduuuu-cyber/gta-hub-launcher/releases/download/${data.tag_name}/GTASeoul.Launcher-Setup-${vNum}.exe`);
+          }
+        }
+      })
+      .catch(err => console.error("Error fetching release:", err));
+  }, []);
+
   return (
     <div className="min-h-screen font-sans text-white overflow-hidden bg-[#050508] relative">
       <Navbar />
@@ -61,7 +85,7 @@ function App() {
           >
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 mb-6 backdrop-blur-md">
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-              <span className="text-xs font-semibold tracking-wide text-green-400 uppercase">v1.0.6 Disponible</span>
+              <span className="text-xs font-semibold tracking-wide text-green-400 uppercase">{version} Disponible</span>
             </div>
 
             <h1 className="text-5xl lg:text-7xl font-black mb-6 leading-tight tracking-tight">
@@ -78,7 +102,7 @@ function App() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 className="px-8 py-4 bg-white text-black rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:shadow-[0_0_50px_rgba(255,255,255,0.4)] transition-all"
-                onClick={() => window.open('https://github.com/Duduuuu-cyber/gta-hub-launcher/releases/latest/download/GTASeoul.Launcher-Setup-1.0.6.exe', '_blank')}
+                onClick={() => window.open(downloadUrl, '_blank')}
               >
                 <Download size={24} />
                 DESCARGAR AHORA
@@ -114,27 +138,20 @@ function App() {
             style={{ y: y1 }}
           >
             {/* Abstract representation of the launcher window */}
-            <div className="relative z-10 w-full aspect-[4/3] bg-gradient-to-br from-gray-900 to-black rounded-2xl border border-white/10 shadow-2xl overflow-hidden backdrop-blur-xl group">
-              <div className="absolute inset-0 bg-[url('https://raw.githubusercontent.com/Duduuuu-cyber/gta-hub-launcher/main/public/screenshot_mock.png')] bg-cover bg-center opacity-50 group-hover:opacity-75 transition-opacity duration-500"></div>
+            <div className="relative z-10 w-full rounded-2xl border border-white/10 shadow-2xl overflow-hidden backdrop-blur-xl group">
+              <img
+                src={launcherPreview}
+                alt="Launcher Preview"
+                className="w-full h-auto block transition-transform duration-700 hover:scale-105"
+              />
 
-              {/* Floating UI Elements Mockup */}
-              <div className="absolute top-4 left-4 right-4 h-8 bg-white/5 rounded-lg flex items-center px-4 gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500/50"></div>
-                <div className="w-3 h-3 rounded-full bg-yellow-500/50"></div>
-                <div className="w-3 h-3 rounded-full bg-green-500/50"></div>
-                <div className="ml-4 w-32 h-2 rounded-full bg-white/10"></div>
+              {/* Removed fake UI overlay to show full screenshot */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <img src={logoSeoul} className="w-32 h-32 opacity-0 group-hover:opacity-10 transition-opacity duration-700" alt="Logo Watermark" />
               </div>
 
-              <div className="absolute inset-0 flex items-center justify-center">
-                <img src={logoSeoul} className="w-32 h-32 opacity-20 filter blur-sm group-hover:blur-0 transition-all duration-700" alt="Logo Watermark" />
-              </div>
-
-              {/* Glass Overlay */}
-              <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-black/80 to-transparent"></div>
-              <div className="absolute bottom-8 left-8 right-8">
-                <div className="h-2 w-2/3 bg-indigo-500/50 rounded-full mb-2 animate-pulse"></div>
-                <div className="h-2 w-1/2 bg-purple-500/30 rounded-full"></div>
-              </div>
+              {/* Subtle gradient at bottom only */}
+              <div className="absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/60 to-transparent pointer-events-none"></div>
             </div>
 
             {/* Decorative Background Elements behind the mockup */}
