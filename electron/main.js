@@ -325,20 +325,22 @@ app.whenReady().then(() => {
 
             // Update Discord RPC if enabled
             if (isRpcEnabled && rpcClient) {
-                const nameDisplay = currentPlayerName ? ` | Jugando como: ${currentPlayerName}` : '';
+                const nameDisplay = currentPlayerName ? `Jugador: ${currentPlayerName}` : 'Sin Nombre';
 
                 if (data.online) {
                     rpcClient.setActivity({
-                        details: `Jugando GTA Seoul Roleplay${nameDisplay}`,
-                        state: `${data.players} de ${data.maxPlayers} Jugadores Online`,
+                        details: 'Jugando GTASeoul RolePlay',
+                        state: nameDisplay,
                         largeImageKey: 'logo',
                         largeImageText: 'GTA Seoul Launcher',
+                        partySize: data.players,
+                        partyMax: data.maxPlayers,
                         instance: false,
                     }).catch(console.error);
                 } else {
                     rpcClient.setActivity({
-                        details: 'Jugando GTA Seoul',
-                        state: currentPlayerName ? `Usuario: ${currentPlayerName}` : 'En el Launcher',
+                        details: 'Jugando GTASeoul RolePlay',
+                        state: nameDisplay,
                         largeImageKey: 'logo',
                         largeImageText: 'GTA Seoul Launcher',
                         instance: false,
@@ -614,20 +616,35 @@ app.whenReady().then(() => {
             });
 
             ps.stderr.on('data', (data) => {
-                console.error(`[PS stderr]: ${data}`);
+                console.log(`[PS stderr / Progress]: ${data}`);
             });
 
             ps.on('close', (code) => {
                 if (code === 0) {
                     console.log('[DEBUG] Extraction successful');
-                    try {
-                        const fs = require('fs');
-                        if (fs.existsSync(zipPath)) {
-                            fs.unlinkSync(zipPath); // Delete zip after success
+
+                    // Robust Deletion: Wait for PowerShell to fully release handle
+                    setTimeout(() => {
+                        try {
+                            const fs = require('fs');
+                            if (fs.existsSync(zipPath)) {
+                                fs.unlinkSync(zipPath); // Delete zip after success
+                                console.log('[DEBUG] Zip deleted successfully');
+                            }
+                        } catch (e) {
+                            console.warn('Could not delete zip (first try), will retry in 2s:', e.message);
+                            // Retry once more
+                            setTimeout(() => {
+                                try {
+                                    const fs = require('fs');
+                                    if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+                                } catch (retryErr) {
+                                    console.error('Final failure deleting zip:', retryErr.message);
+                                }
+                            }, 2000);
                         }
-                    } catch (e) {
-                        console.warn('Could not delete zip:', e);
-                    }
+                    }, 1000); // Wait 1s before first delete attempt
+
                     resolve({ success: true });
                 } else {
                     console.error('[DEBUG] Extraction failed with code:', code);

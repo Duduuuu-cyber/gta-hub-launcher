@@ -30,12 +30,18 @@ const Mods = () => {
 
         const handleComplete = async (event, zipPath) => {
             setStatusMsg('Extrayendo...');
-            const gamePath = localStorage.getItem('gtapath');
+            let gamePath = localStorage.getItem('gtapath');
 
             if (!gamePath) {
                 alert("Error: No se ha configurado la ruta del juego.");
                 setInstallingId(null);
                 return;
+            }
+
+            // Fix nested modloader issue: If path ends in \modloader, strip it
+            if (gamePath.toLowerCase().endsWith('\\modloader')) {
+                gamePath = gamePath.substring(0, gamePath.lastIndexOf('\\'));
+                console.log('Fixed nested path to:', gamePath);
             }
 
             try {
