@@ -1,5 +1,5 @@
 import React from 'react';
-import { Save, Shield, Zap, Trash2, AlertTriangle, DownloadCloud } from 'lucide-react';
+import { Save, Shield, Zap, Trash2, AlertTriangle, DownloadCloud, MessageSquare, Monitor, Share2, FileWarning } from 'lucide-react';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: { invoke: () => Promise.resolve(null) } };
 
@@ -23,8 +23,6 @@ const Settings = () => {
         if (folderPath.toLowerCase().endsWith('\\gta_sa.exe')) {
           folderPath = folderPath.substring(0, folderPath.lastIndexOf('\\'));
         }
-        // Only override if we don't have a path, or maybe we just want to trust LS?
-        // Let's only set if local state is empty to respect the Wizard's choice
         if (!gamePath) {
           setGamePath(folderPath);
         }
@@ -45,11 +43,12 @@ const Settings = () => {
         const match = content.match(/fpslimit=(\d+)/);
         if (match) {
           const val = parseInt(match[1]);
-          setFpsLimit(val > 0 && val < 200);
+          // Fix: 100 often means "off" or "unlimited" in some configs, while 90 is the standard "on".
+          // We treat 90 as "Enabled" (True). Anything else (like 100 or -1) is "Disabled" (False).
+          setFpsLimit(val === 90);
         }
       }
     };
-    loadSampConfig();
     loadSampConfig();
 
     // Listen for auto-update events
@@ -65,6 +64,12 @@ const Settings = () => {
   const selectGameDirectory = async () => {
     const path = await ipcRenderer.invoke('select-directory', 'Selecciona la carpeta raíz de tu GTA San Andreas');
     if (path) {
+      // Validate gta_sa.exe existence
+      const isValid = await ipcRenderer.invoke('check-game-files', path);
+      if (!isValid) {
+        alert('⚠️ Error: No se encontró gta_sa.exe en esta carpeta.\nAsegúrate de seleccionar la carpeta RAÍZ del juego, no "modloader" ni otras subcarpetas.');
+        return;
+      }
       setGamePath(path);
     }
   };
@@ -94,6 +99,8 @@ const Settings = () => {
     setFpsLimit(newStatus);
 
     let content = await ipcRenderer.invoke('read-samp-config') || '';
+    // If enabled, strictly set 90. If disabled, set 100 (SAMP limit) or maybe just don't limit?
+    // Standard practice: 90 is "on". 100 or more is "off" effectively.
     const limitLine = newStatus ? 'fpslimit=90' : 'fpslimit=100';
 
     if (content.includes('fpslimit=')) {
@@ -275,7 +282,7 @@ const Settings = () => {
         <div className="switches-grid">
           <div className="switch-item">
             <div className="switch-info">
-              <span className="switch-title">Discord Rich Presence</span>
+              <span className="switch-title"><Share2 size={16} className="text-indigo-400 inline mr-2" /> Discord Rich Presence</span>
               <span className="switch-desc">Muestra tu estado en Discord.</span>
             </div>
             <button className={`toggle-btn ${discordRpc ? 'active' : ''}`} onClick={toggleDiscordRpc}>
@@ -285,7 +292,7 @@ const Settings = () => {
 
           <div className="switch-item">
             <div className="switch-info">
-              <span className="switch-title">Limitar FPS (90)</span>
+              <span className="switch-title"><Monitor size={16} className="text-green-400 inline mr-2" /> Limitar FPS (90)</span>
               <span className="switch-desc">Recomendado para evitar bugs de físicas.</span>
             </div>
             <button className={`toggle-btn ${fpsLimit ? 'active' : ''}`} onClick={toggleFpsLimit}>
@@ -295,7 +302,7 @@ const Settings = () => {
 
           <div className="switch-item">
             <div className="switch-info">
-              <span className="switch-title">Timestamp en Chat</span>
+              <span className="switch-title"><MessageSquare size={16} className="text-yellow-400 inline mr-2" /> Timestamp en Chat</span>
               <span className="switch-desc">Muestra la hora en los mensajes del chat.</span>
             </div>
             <button className={`toggle-btn ${timestamp ? 'active' : ''}`} onClick={toggleTimestamp}>

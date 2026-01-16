@@ -8,6 +8,16 @@ const Changelog = () => {
     // Example data - normally this would fetch from a JSON
     const [changes] = useState([
         {
+            version: '1.0.7',
+            date: '15 Enero 2026',
+            features: [
+                { type: 'fix', text: 'Corregido: Configuración de FPS y Timestamp no se guardaba correctamente' },
+                { type: 'fix', text: 'Corregido: Mods extraídos en subcarpetas (Validación de ruta)' },
+                { type: 'improve', text: 'Nuevos iconos en el menú de ajustes' },
+                { type: 'new', text: 'Rebranding completo a GTASeoul' }
+            ]
+        },
+        {
             version: '1.0.6',
             date: '15 Enero 2026',
             features: [
