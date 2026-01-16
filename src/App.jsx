@@ -11,6 +11,7 @@ import Changelog from './pages/Changelog'
 import SplashScreen from './components/SplashScreen'
 import FirstRunWizard from './components/FirstRunWizard'
 import UpdateModal from './components/UpdateModal'
+import Servers from './pages/Servers'
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: { invoke: () => Promise.resolve(null), on: () => { }, removeListener: () => { }, send: () => { } } };
 
@@ -42,6 +43,11 @@ const Sidebar = () => {
           <HomeIcon size={20} />
           <span>Inicio</span>
           {location.pathname === '/' && <div className="active-indicator" />}
+        </NavLink>
+        <NavLink to="/servers" className="nav-item">
+          <Server size={20} />
+          <span>Servidores</span>
+          {location.pathname === '/servers' && <div className="active-indicator" />}
         </NavLink>
         <NavLink to="/mods" className="nav-item">
           <Package size={20} />
@@ -193,6 +199,7 @@ function App() {
               <div className="page-content">
                 <Routes>
                   <Route path="/" element={<Home />} />
+                  <Route path="/servers" element={<Servers />} />
                   <Route path="/mods" element={<Mods />} />
                   <Route path="/changelog" element={<Changelog />} />
                   <Route path="/settings" element={<Settings />} />

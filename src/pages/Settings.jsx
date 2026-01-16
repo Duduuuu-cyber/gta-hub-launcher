@@ -1,5 +1,5 @@
 import React from 'react';
-import { Save, Shield, Zap, Trash2, AlertTriangle, DownloadCloud, MessageSquare, Monitor, Share2, FileWarning } from 'lucide-react';
+import { Save, Shield, Zap, Trash2, AlertTriangle, DownloadCloud, MessageSquare, Monitor, Share2, FileWarning, X } from 'lucide-react';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: { invoke: () => Promise.resolve(null) } };
 
@@ -156,49 +156,157 @@ const Settings = () => {
     setTimeout(() => setStatusMsg(''), 3000);
   };
 
-  /* Cache Redownload Logic */
+  /* Cache & Game Redownload Logic */
   const CACHE_URL = "https://github.com/Duduuuu-cyber/gta-hub-launcher/releases/download/cache-v1/cacheseoul.zip";
+  const GAME_URL = "https://launcher.seoul-rp.net/archivos/GTA%20FULL.zip";
+
   const [downloadingCache, setDownloadingCache] = React.useState(false);
+  const [downloadingGame, setDownloadingGame] = React.useState(false);
   const [downloadProgress, setDownloadProgress] = React.useState(0);
 
   React.useEffect(() => {
     const handleProgress = (event, percent) => {
-      if (downloadingCache) setDownloadProgress(percent);
+      if (downloadingCache || downloadingGame) setDownloadProgress(percent);
     };
 
     const handleComplete = async (event, zipPath) => {
-      if (!downloadingCache) return;
-      setStatusMsg('Descomprimiendo caché...');
+      if (downloadingCache) {
+        setStatusMsg('Descomprimiendo caché...');
 
-      // Extract to game folder
-      const targetDir = gamePath;
-      if (!targetDir) {
-        alert('Error: No hay ruta de juego definida para instalar la caché.');
+        // We extract to the PARENT of the cache path because the zip contains "cacheseoul" folder
+        // Logic: If zip has "cacheseoul" folder, and user selected "D:\MyCache", we might end up with "D:\MyCache\cacheseoul".
+        // To respect user's choice properly, we should ideally move files. 
+        // For simplicity and safety: 
+        // 1. If we are using default game location, extract to game folder.
+        // 2. If custom, alert user that we will extract 'cacheseoul' folder inside their selected folder.
+
+        // BETTER APPROACH for this specific zip structure:
+        // Extract to a temp folder, then move contents to cachePath.
+
+        const tempDir = await ipcRenderer.invoke('get-safe-game-path'); // Use doc folder as temp base
+        const result = await ipcRenderer.invoke('extract-game', zipPath, tempDir);
+
+        if (result.success) {
+          const extractedCacheFolder = tempDir + '\\cacheseoul';
+          const fileSystem = window.require('fs');
+          const pathModule = window.require('path');
+
+          // If extracted successfully
+          if (fileSystem.existsSync(extractedCacheFolder)) {
+            try {
+              // Move contents to cachePath
+              let destPath = cachePath;
+              if (!destPath) {
+                destPath = pathModule.join(gamePath, 'cacheseoul');
+              }
+
+              if (!fileSystem.existsSync(destPath)) {
+                fileSystem.mkdirSync(destPath, { recursive: true });
+              }
+
+              const files = fileSystem.readdirSync(extractedCacheFolder);
+              for (const file of files) {
+                const src = pathModule.join(extractedCacheFolder, file);
+                const dest = pathModule.join(destPath, file);
+                // Move (Rename)
+                // If dest exists, rm it first (we already cleared cache but just in case)
+                if (fileSystem.existsSync(dest)) fileSystem.rmSync(dest, { recursive: true, force: true });
+                fileSystem.renameSync(src, dest);
+              }
+
+              // Cleanup temp extracted folder
+              fileSystem.rmdirSync(extractedCacheFolder);
+
+              // Verify and Save
+              await ipcRenderer.invoke('set-registry-value', 'HKCU\\Software\\SAMP', 'model_cache', destPath);
+              setCachePath(destPath);
+              localStorage.setItem('cachepath', destPath);
+
+              setStatusMsg('¡Caché re-descargada e instalada!');
+              setTimeout(() => setStatusMsg(''), 4000);
+
+            } catch (err) {
+              alert('Error moviendo archivos de caché: ' + err.message);
+            }
+          } else {
+            alert('Error: No se encontró la carpeta cacheseoul en el zip.');
+          }
+        } else {
+          alert('Error al extraer caché: ' + result.error);
+        }
         setDownloadingCache(false);
-        return;
       }
 
-      const result = await ipcRenderer.invoke('extract-game', zipPath, targetDir);
+      else if (downloadingGame) {
+        setStatusMsg('Descomprimiendo juego completo...');
 
-      if (result.success) {
-        const fullCachePath = targetDir + '\\cacheseoul';
-        setCachePath(fullCachePath);
-        localStorage.setItem('cachepath', fullCachePath);
-        await ipcRenderer.invoke('set-registry-value', 'HKCU\\Software\\SAMP', 'model_cache', fullCachePath);
+        // We need to know where to extract. We use the safe path + extraction logic
+        const targetDir = await ipcRenderer.invoke('get-safe-game-path');
+        const result = await ipcRenderer.invoke('extract-game', zipPath, targetDir);
 
-        setStatusMsg('¡Caché re-descargada e instalada!');
-        setTimeout(() => setStatusMsg(''), 4000);
-      } else {
-        alert('Error al extraer caché: ' + result.error);
+        if (result.success) {
+          let finalGamePath = targetDir;
+          // Verify gta_sa.exe location
+          const isValid = await ipcRenderer.invoke('check-game-files', targetDir);
+
+          if (!isValid) {
+            // Check subdirs logic (simplified version of FirstRunWizard)
+            // We'll trust the user or simple check:
+            // Actually, let's invoke a helper or just set it if check-game-files fails on root but maybe succeeds in subdir? 
+            // For now, assuming extraction structure is standard. 
+            // If standard zip has a root folder "GTA San Andreas", files will be in targetDir/GTA San Andreas
+            // Let's try to detect it via node 'fs' if possible or just loop
+          }
+
+          // Since we can't easily use 'fs' in renderer without enabling nodeIntegration fully or using window.require carefully (which we have at top).
+          // Let's reuse the logic from line 4 roughly by invoking a check
+          // For now, simpler: assumes it extracts to targetDir. 
+          // If the zip contains a folder, the user might need to select it? 
+          // Better: Auto-detect like FirstRunWizard did.
+
+          // Let's use the same logic as FirstRunWizard roughly, but purely via IPC if we want to be safe, 
+          // OR use the window.require('fs') if available (it is at top).
+
+          const fs = window.require('fs');
+          const path = window.require('path');
+
+          if (!fs.existsSync(path.join(targetDir, 'gta_sa.exe'))) {
+            try {
+              const subdirs = fs.readdirSync(targetDir, { withFileTypes: true })
+                .filter(dirent => dirent.isDirectory())
+                .map(dirent => dirent.name);
+
+              for (const subdir of subdirs) {
+                const subPath = path.join(targetDir, subdir);
+                if (fs.existsSync(path.join(subPath, 'gta_sa.exe'))) {
+                  finalGamePath = subPath;
+                  break;
+                }
+              }
+            } catch (e) { console.error(e); }
+          }
+
+          setGamePath(finalGamePath);
+          localStorage.setItem('gtapath', finalGamePath);
+          await ipcRenderer.invoke('set-registry-value', 'HKCU\\Software\\SAMP', 'gta_sa_exe', path.join(finalGamePath, 'gta_sa.exe'));
+
+          setStatusMsg('¡Juego re-descargado e instalado!');
+          alert('Juego re-instalado en: ' + finalGamePath + '\nLa ruta se ha actualizado automáticamente.');
+          setTimeout(() => setStatusMsg(''), 4000);
+        } else {
+          alert('Error al extraer juego: ' + result.error);
+        }
+        setDownloadingGame(false);
       }
-      setDownloadingCache(false);
+
       setDownloadProgress(0);
     };
 
     const handleError = (event, error) => {
-      if (!downloadingCache) return;
+      if (!downloadingCache && !downloadingGame) return;
       alert('Error en descarga: ' + error);
       setDownloadingCache(false);
+      setDownloadingGame(false);
       setDownloadProgress(0);
     };
 
@@ -211,7 +319,7 @@ const Settings = () => {
       ipcRenderer.removeListener('download-complete', handleComplete);
       ipcRenderer.removeListener('download-error', handleError);
     };
-  }, [downloadingCache, gamePath]);
+  }, [downloadingCache, downloadingGame, gamePath, cachePath]);
 
   const handleRedownloadCache = async () => {
     if (!gamePath) {
@@ -222,14 +330,34 @@ const Settings = () => {
       setDownloadingCache(true);
       setDownloadProgress(0);
 
-      // Clean old cache first? Maybe safer to just overwrite/extract over. 
-      // But let's try to clear it using our new handler for a clean install
+      // Clean old cache first
       await ipcRenderer.invoke('clear-model-cache', cachePath);
 
       const appPath = await ipcRenderer.invoke('get-app-path');
       const zipTarget = appPath + '\\cache_temp_redo.zip';
 
       ipcRenderer.send('download-game-start', CACHE_URL, zipTarget);
+    }
+  };
+
+  const handleRedownloadGame = async () => {
+    if (confirm('PELIGRO: Esto descargará el juego completo de nuevo e instalará una copia limpia.\nSe usará una ruta segura (Documents) para evitar errores.\n\n¿Quieres continuar?')) {
+      setDownloadingGame(true);
+      setDownloadProgress(0);
+
+      const safePath = await ipcRenderer.invoke('get-safe-game-path');
+      const zipTarget = safePath + '\\gta_full_redo.zip';
+
+      ipcRenderer.send('download-game-start', GAME_URL, zipTarget);
+    }
+  };
+
+  const cancelDownload = () => {
+    if (confirm('¿Estás seguro de que quieres cancelar la descarga?')) {
+      ipcRenderer.send('download-game-cancel');
+      setDownloadingCache(false);
+      setDownloadingGame(false);
+      setDownloadProgress(0);
     }
   };
 
@@ -263,7 +391,37 @@ const Settings = () => {
               <div className="download-card-active">
                 <div className="d-status">
                   <span>DESCARGANDO CACHÉ</span>
-                  <span className="d-percent">{Math.round(downloadProgress)}%</span>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <span className="d-percent">{Math.round(downloadProgress)}%</span>
+                    <button onClick={cancelDownload} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0, display: 'flex' }} title="Cancelar">
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+                <div className="progress-bar-cyber">
+                  <div className="fill" style={{ width: `${downloadProgress}%` }}></div>
+                  <div className="glow" style={{ left: `${downloadProgress}%` }}></div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: '16px' }}>
+            {!downloadingGame ? (
+              <button className="game-download-btn" onClick={handleRedownloadGame}>
+                <DownloadCloud size={18} />
+                <span>RE-DESCARGAR JUEGO COMPLETO</span>
+              </button>
+            ) : (
+              <div className="download-card-active">
+                <div className="d-status">
+                  <span>DESCARGANDO JUEGO</span>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <span className="d-percent">{Math.round(downloadProgress)}%</span>
+                    <button onClick={cancelDownload} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0, display: 'flex' }} title="Cancelar">
+                      <X size={18} />
+                    </button>
+                  </div>
                 </div>
                 <div className="progress-bar-cyber">
                   <div className="fill" style={{ width: `${downloadProgress}%` }}></div>
@@ -450,6 +608,33 @@ const Settings = () => {
         
         .cache-download-btn:hover::before {
             left: 100%;
+        }
+
+        .game-download-btn {
+            width: 100%;
+            background: linear-gradient(90deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.1));
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #93c5fd;
+            padding: 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
+        }
+        
+        .game-download-btn:hover {
+            border-color: #3b82f6;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.4), inset 0 0 10px rgba(59, 130, 246, 0.2);
+            color: white;
+            transform: translateY(-2px);
+            background: linear-gradient(90deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.2));
         }
 
         /* Active Download Card */

@@ -155,8 +155,8 @@ function querySampServer(ip, port) {
                 let hostname = '';
                 if (hostnameLen > 0) {
                     // iconv-lite could be used here for different encodings, 
-                    // but for now we assume standard Windows-1252 or similar, approximated by latin1 or utf8
-                    hostname = msg.toString('latin1', offset, offset + hostnameLen);
+                    // but most modern servers (and OMP) use UTF-8. 
+                    hostname = msg.toString('utf8', offset, offset + hostnameLen);
                     offset += hostnameLen;
                 }
 
@@ -191,7 +191,7 @@ function querySampServer(ip, port) {
                 socket.close()
                 resolve({ online: false, players: 0, maxPlayers: 0 })
             }
-        }, 2000)
+        }, 4000)
     })
 }
 
@@ -355,6 +355,41 @@ app.whenReady().then(() => {
         }
     })
 
+    // Generic SAMP Server Query (for Servers Page)
+    ipcMain.handle('query-server', async (event, address) => {
+        const dns = await import('dns/promises');
+        try {
+            // Parse Address (allows "IP:Port" or just "IP" -> default 7777)
+            let host = address;
+            let port = 7777;
+
+            if (address.includes(':')) {
+                const parts = address.split(':');
+                host = parts[0];
+                port = parseInt(parts[1]) || 7777;
+            }
+
+            console.log(`[Query] Resolving ${host}:${port}...`);
+
+            // Resolve Hostname to IP if needed
+            // dgram mostly needs generic IP, but let's resolve to be safe and standard
+            const lookup = await dns.lookup(host);
+            const ip = lookup.address;
+
+            // Measure Ping (rough estimate using query time)
+            const start = Date.now();
+            const data = await querySampServer(ip, port);
+            const end = Date.now();
+            const ping = end - start;
+
+            return { ...data, ping, ip: ip, originalAddress: address };
+
+        } catch (e) {
+            console.error('[Query] Error querying server:', address, e);
+            return { online: false, hostname: 'Sin respuesta', players: 0, maxPlayers: 0, ping: -1 };
+        }
+    });
+
     // Select Game Directory (Legacy, kept for backup)
     ipcMain.handle('select-game-directory', async () => {
         const result = await dialog.showOpenDialog(win, {
@@ -375,7 +410,7 @@ app.whenReady().then(() => {
 
     // Launch Game
     let lastLaunchTime = 0;
-    ipcMain.on('launch-game', async (event, gamePath) => {
+    ipcMain.on('launch-game', async (event, gamePath, address) => {
         if (!gamePath) return;
 
         // Anti-spam / Debounce (10 seconds)
@@ -390,12 +425,31 @@ app.whenReady().then(() => {
         const { spawn } = await import('child_process');
 
         try {
-            // Resolve IP
-            console.log('Resolving samp.seoul-rp.net...');
-            const result = await dns.lookup('samp.seoul-rp.net');
-            console.log('Resolved IP:', result.address);
-            const serverIP = result.address;
-            const serverPort = 7777;
+            let serverIP;
+            let serverPort = 7777;
+
+            if (address) {
+                // Custom Server
+                console.log(`[Launch] Custom Address provided: ${address}`);
+                if (address.includes(':')) {
+                    const parts = address.split(':');
+                    // If it's a hostname, we should resolve it. If it's IP, lookup returns it anyway.
+                    const host = parts[0];
+                    serverPort = parseInt(parts[1]) || 7777;
+
+                    const result = await dns.lookup(host);
+                    serverIP = result.address;
+                } else {
+                    const Result = await dns.lookup(address);
+                    serverIP = Result.address;
+                }
+            } else {
+                // Default Server (Seoul RP)
+                console.log('Resolving samp.seoul-rp.net...');
+                const result = await dns.lookup('samp.seoul-rp.net');
+                console.log('Resolved IP:', result.address);
+                serverIP = result.address;
+            }
 
             console.log(`Launching SAMP at ${gamePath} connecting to ${serverIP}:${serverPort}`);
 
@@ -710,11 +764,15 @@ app.whenReady().then(() => {
     ipcMain.handle('clear-model-cache', async (event, cachePath) => {
         try {
             if (fs.existsSync(cachePath)) {
-                // Remove recursive
-                fs.rmSync(cachePath, { recursive: true, force: true });
+                // Remove contents only, NOT the directory itself
+                const files = fs.readdirSync(cachePath);
+                for (const file of files) {
+                    const curPath = join(cachePath, file);
+                    fs.rmSync(curPath, { recursive: true, force: true });
+                }
                 return true;
             }
-            return false;
+            return false; // Directory doesn't exist, nothing to clear
         } catch (e) {
             console.error('Error clearing cache:', e);
             return false;

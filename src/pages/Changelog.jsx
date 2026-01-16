@@ -8,11 +8,24 @@ const Changelog = () => {
     // Example data - normally this would fetch from a JSON
     const [changes] = useState([
         {
+            version: '1.0.9',
+            date: '16 Enero 2026',
+            features: [
+                { type: 'improve', text: 'Re-diseño Premium de "Servidores" y ventana de conexión (Glassmorphism).' },
+                { type: 'new', text: 'Soporte para IPs y Dominios en conexión directa (ej: 192.168.1.1:7777 o servidor.com).' },
+                { type: 'new', text: 'Botón "Cancelar Descarga" en la configuración.' },
+                { type: 'fix', text: 'Corrección importante en la ruta de caché personalizada (ya no se borra tu carpeta).' },
+                { type: 'fix', text: 'Lectura de servidores mejorada (Soporte UTF-8 para nombres).' },
+                { type: 'improve', text: 'Timeout de consulta aumentado para servidores lentos.' }
+            ]
+        },
+        {
             version: '1.0.8',
             date: '16 Enero 2026',
             features: [
                 { type: 'new', text: 'Protección Total: El juego ahora se instala en Documentos para evitar borrados al actualizar.' },
                 { type: 'new', text: 'Auto-Recuperación: El launcher detecta automáticamente tu instalación si pierdes la configuración.' },
+                { type: 'new', text: 'Opción "Re-descargar Juego" en Ajustes: Descarga una copia limpia y la instala automáticamente en la ruta segura.' },
                 { type: 'fix', text: 'ModLoader ahora es 100% funcional y compatible con la descarga automática.' },
                 { type: 'fix', text: 'Mejoras visuales y correcciones menores en la interfaz.' }
             ]
