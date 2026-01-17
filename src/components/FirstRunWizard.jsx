@@ -164,9 +164,12 @@ const FirstRunWizard = ({ onComplete }) => {
         setDownloadType('game');
         setStep('downloading');
 
-        // Get safe path for installation
-        const safePath = await ipcRenderer.invoke('get-safe-game-path');
-        const zipTarget = safePath + '\\gta_temp.zip'; // Download zip INSIDE the safe folder
+        // Use Temp directory to avoid EPERM permissions issues in Program Files
+        const tempPath = await ipcRenderer.invoke('get-temp-path');
+        const zipTarget = tempPath + '\\gta_temp.zip';
+
+        // Store zip path for extraction step
+        // We need to pass safePath to extraction later, which we do in handleDownloadComplete
 
         ipcRenderer.send('download-game-start', GAME_URL, zipTarget);
     };
@@ -175,8 +178,8 @@ const FirstRunWizard = ({ onComplete }) => {
         setDownloadType('cache');
         setStep('downloading');
 
-        const safePath = await ipcRenderer.invoke('get-safe-game-path');
-        const zipTarget = safePath + '\\cache_temp.zip';
+        const tempPath = await ipcRenderer.invoke('get-temp-path');
+        const zipTarget = tempPath + '\\cache_temp.zip';
 
         ipcRenderer.send('download-game-start', CACHE_URL, zipTarget);
     };

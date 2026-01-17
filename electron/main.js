@@ -13,6 +13,19 @@ import https from 'https'
 import AdmZip from 'adm-zip'
 import DiscordRPC from 'discord-rpc'
 
+// ----------------------------------------------------------------------
+// DEBUG CONFIGURATION
+// 1 = Active (Localhost:7777), 0 = Inactive (Production)
+// ----------------------------------------------------------------------
+const DEBUG_MODE = 0;
+
+const SERVER_CONFIG = {
+    host: DEBUG_MODE ? '127.0.0.1' : 'samp.seoul-rp.net',
+    port: 7777,
+    name: DEBUG_MODE ? 'GTASeoul [DEBUG]' : 'GTASeoul'
+};
+console.log(`[MAIN] Launched in ${DEBUG_MODE ? 'DEBUG (Localhost)' : 'PRODUCTION'} mode.`);
+
 const DISCORD_CLIENT_ID = '1461428328085852315'; // REPLACE THIS WITH YOUR ACTUAL DISCORD CLIENT ID from https://discord.com/developers/applications
 let rpcClient;
 let isRpcEnabled = false;
@@ -221,10 +234,11 @@ function createWindow() {
 
     if (process.env.VITE_DEV_SERVER_URL) {
         win.loadURL(process.env.VITE_DEV_SERVER_URL)
-        // win.webContents.openDevTools()
+        // win.webContents.openDevTools() // Disabled for production security
     } else {
-        // win.loadFile('dist/index.html')
         win.loadFile(join(process.env.DIST, 'index.html'))
+        win.setMenu(null); // Remove default menu (File, Edit, etc)
+        // win.webContents.openDevTools() // Strictly disabled in prod
     }
 }
 
@@ -317,11 +331,12 @@ app.whenReady().then(() => {
         // Let's optimize: We'll do a dns lookup first.
         const dns = await import('dns/promises');
         try {
-            console.log('Resolving samp.seoul-rp.net...');
-            const result = await dns.lookup('samp.seoul-rp.net');
-            console.log('Resolved IP:', result.address);
-            const data = await querySampServer(result.address, 7777);
-            console.log('Query result:', data);
+            // console.log('Resolving samp.seoul-rp.net...');
+            const targetHost = SERVER_CONFIG.host;
+            const result = await dns.lookup(targetHost);
+            // console.log('Resolved IP:', result.address);
+            const data = await querySampServer(result.address, SERVER_CONFIG.port);
+            // console.log('Query result:', data);
 
             // Update Discord RPC if enabled
             if (isRpcEnabled && rpcClient) {
@@ -444,11 +459,16 @@ app.whenReady().then(() => {
                     serverIP = Result.address;
                 }
             } else {
-                // Default Server (Seoul RP)
-                console.log('Resolving samp.seoul-rp.net...');
-                const result = await dns.lookup('samp.seoul-rp.net');
+                // Default Server (Seoul RP) - Respects DEBUG_MODE
+                const targetHost = SERVER_CONFIG.host;
+                console.log(`[Launch Debug] DEBUG_MODE value is:`, DEBUG_MODE);
+                console.log(`[Launch Debug] SERVER_CONFIG.host is:`, SERVER_CONFIG.host);
+
+                console.log(`Resolving ${targetHost}... (Mode: ${DEBUG_MODE ? 'DEBUG' : 'PROD'})`);
+                const result = await dns.lookup(targetHost);
                 console.log('Resolved IP:', result.address);
                 serverIP = result.address;
+                serverPort = SERVER_CONFIG.port;
             }
 
             console.log(`Launching SAMP at ${gamePath} connecting to ${serverIP}:${serverPort}`);
@@ -622,11 +642,28 @@ app.whenReady().then(() => {
         }
     });
 
+    ipcMain.handle('get-temp-path', () => app.getPath('temp'));
+
     // Global reference for download cancellation
     let activeDownloadRequest = null;
 
     // Download Game
     ipcMain.on('download-game-start', (event, url, targetPath) => {
+        let finalPath = targetPath;
+
+        // Security / Permission Check
+        try {
+            // Try to open file for writing to check permissions
+            const checkFd = fs.openSync(finalPath, 'w');
+            fs.closeSync(checkFd);
+            fs.unlinkSync(finalPath); // Clean up check file
+        } catch (err) {
+            console.log(`[Main] EPERM or Error writing to ${finalPath}. Fallback to Temp.`);
+            const { basename } = require('path');
+            finalPath = join(app.getPath('temp'), basename(targetPath));
+            console.log(`[Main] New Target Path: ${finalPath}`);
+        }
+
         const startDownload = (downloadUrl, redirectCount = 0) => {
             console.log(`[DEBUG] Starting download from: ${downloadUrl} (Redirects: ${redirectCount})`);
 
@@ -652,7 +689,7 @@ app.whenReady().then(() => {
                 }
 
                 // Prepare file stream
-                const file = fs.createWriteStream(targetPath);
+                const file = fs.createWriteStream(finalPath);
                 const total = parseInt(response.headers['content-length'], 10);
                 let cur = 0;
 
@@ -669,20 +706,21 @@ app.whenReady().then(() => {
                 response.on('end', () => {
                     file.end();
                     console.log('[DEBUG] Download finished.');
-                    event.sender.send('download-complete', targetPath);
+                    // IMPORTANT: Send back the ACTUAL finalPath used
+                    event.sender.send('download-complete', finalPath);
                     activeDownloadRequest = null;
                 });
 
                 response.on('error', (err) => {
                     file.close();
-                    fs.unlink(targetPath, () => { });
-                    event.sender.send('download-error', err.message);
+                    fs.unlink(finalPath, () => { });
+                    event.sender.send('download-error', 'Error de red: ' + err.message);
                 });
             });
 
             activeDownloadRequest.on('error', (err) => {
                 console.error('[DEBUG] Request error:', err);
-                event.sender.send('download-error', err.message);
+                event.sender.send('download-error', 'Error solicitud: ' + err.message);
             });
         };
 

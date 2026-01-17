@@ -1,7 +1,7 @@
 {
   "name": "gtaseoul-launcher",
   "private": true,
-  "version": "1.0.9",
+  "version": "1.1.0",
   "type": "module",
   "main": "dist-electron/main.cjs",
   "author": "GTASeoul",
@@ -50,6 +50,7 @@
   "dependencies": {
     "adm-zip": "^0.5.16",
     "bufferutil": "^4.1.0",
+    "canvas-confetti": "^1.9.4",
     "discord-rpc": "^4.0.1",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.7.3",
@@ -62,8 +63,11 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.23",
     "electron": "^28.1.0",
     "electron-builder": "^24.9.1",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.1",
     "tree-kill": "^1.2.2",
     "vite": "^5.0.8",
     "vite-plugin-electron": "^0.15.4",

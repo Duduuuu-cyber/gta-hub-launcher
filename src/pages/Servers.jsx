@@ -1,9 +1,97 @@
-import React, { useState, useEffect } from 'react';
-import { Server, Plus, Trash2, Star, RefreshCw, Play, X, User, Activity, Globe, Zap, Shield } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Server, Plus, Trash2, Star, RefreshCw, Play, X, User, Activity, Globe, Wifi, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import CharacterSelector from '../components/CharacterSelector';
+import RegistrationModal from '../components/RegistrationModal';
+import CharacterCreatorModal from '../components/CharacterCreatorModal';
 
 // Mock ipcRenderer for web dev
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: { invoke: () => Promise.resolve({}), send: () => { } } };
+
+// --- OPTIMIZED ROW COMPONENT ---
+// Using React.memo to prevent re-renders of the entire list when only one server updates
+const ServerRow = React.memo(({ server, data, isLoading, isOnline, onConnect, onToggleFav, onRemove }) => {
+    return (
+        <motion.div
+            layout
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.2 }}
+            className={`group flex items-center gap-4 p-4 rounded-xl border transition-all duration-200 cursor-pointer mb-2
+                ${server.favorite
+                    ? 'bg-gradient-to-r from-yellow-500/5 to-transparent border-yellow-500/20 hover:border-yellow-500/40'
+                    : 'bg-[#18181b]/60 hover:bg-[#18181b] border-white/5 hover:border-white/10'
+                } hover:shadow-lg hover:shadow-black/20 hover:scale-[1.005]`}
+            onClick={() => onConnect(server)}
+        >
+            {/* Status Dot */}
+            <div className="flex-shrink-0 pl-1">
+                <div className={`relative flex items-center justify-center w-3 h-3 rounded-full ${isOnline ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-red-500'}`}>
+                    {isOnline && <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping"></span>}
+                </div>
+            </div>
+
+            {/* Server Info */}
+            <div className="flex-grow min-w-0">
+                <h3 className={`font-bold text-sm truncate transition-colors ${server.favorite ? 'text-yellow-100' : 'text-gray-200 group-hover:text-white'}`}>
+                    {isLoading ? 'Cargando...' : (data.hostname || 'Sin respuesta')}
+                </h3>
+                <div className="flex items-center gap-3 text-xs text-gray-500 font-mono mt-0.5">
+                    <span className="flex items-center gap-1"><Globe size={10} /> {server.address}</span>
+                    <span className="hidden sm:inline-block opacity-50">|</span>
+                    <span className="hidden sm:inline-block">{data.gamemode || '-'}</span>
+                </div>
+            </div>
+
+            {/* Players */}
+            <div className="w-24 text-right flex-shrink-0">
+                <div className="flex flex-col items-end">
+                    <span className={`text-xs font-bold font-mono ${isOnline ? 'text-indigo-400' : 'text-gray-600'}`}>
+                        {isOnline ? `${data.players}/${data.maxPlayers}` : '-/-'}
+                    </span>
+                    <span className="text-[10px] text-gray-600 uppercase tracking-wider">Players</span>
+                </div>
+            </div>
+
+            {/* Ping */}
+            <div className="w-16 text-right flex-shrink-0">
+                <div className="flex flex-col items-end">
+                    <span className={`text-xs font-bold font-mono ${!isOnline ? 'text-gray-600' : data.ping < 100 ? 'text-emerald-400' : data.ping < 200 ? 'text-yellow-400' : 'text-red-400'}`}>
+                        {isOnline ? `${data.ping}ms` : '-'}
+                    </span>
+                    <span className="text-[10px] text-gray-600 uppercase tracking-wider">Ping</span>
+                </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-1 pl-2 border-l border-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <button
+                    className={`p-2 rounded-lg transition-colors ${server.favorite ? 'text-yellow-400 hover:bg-yellow-500/10' : 'text-gray-500 hover:text-yellow-400 hover:bg-white/5'}`}
+                    onClick={(e) => onToggleFav(server.address, e)}
+                    title="Favorito"
+                >
+                    <Star size={16} fill={server.favorite ? "currentColor" : "none"} />
+                </button>
+                <button
+                    className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    onClick={(e) => onRemove(server.address, e)}
+                    title="Eliminar"
+                >
+                    <Trash2 size={16} />
+                </button>
+                <button
+                    className="p-2 rounded-lg text-indigo-400 hover:text-white hover:bg-indigo-600 transition-colors"
+                    onClick={() => onConnect(server)}
+                    title="Conectar"
+                >
+                    <Play size={16} fill="currentColor" />
+                </button>
+            </div>
+        </motion.div>
+    );
+});
+
 
 const Servers = () => {
     // Initial servers list
@@ -25,10 +113,39 @@ const Servers = () => {
     const [connectModalServer, setConnectModalServer] = useState(null); // Server Object or null
     const [nickname, setNickname] = useState('');
 
+    // SSO State
+    const [userSession, setUserSession] = useState(null);
+    const [ssoCharacters, setSsoCharacters] = useState([]);
+    const [isLaunching, setIsLaunching] = useState(false);
+
+    // Auth Modals
+    const [showRegisterModal, setShowRegisterModal] = useState(false);
+    const [showCreateCharModal, setShowCreateCharModal] = useState(false);
+
     useEffect(() => {
         refreshAll();
         loadNickname();
+        loadSession();
+        window.addEventListener('auth-change', loadSession);
+        return () => window.removeEventListener('auth-change', loadSession);
     }, []);
+
+    const loadSession = () => {
+        const saved = localStorage.getItem('user_session');
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                setUserSession(parsed);
+                let chars = [];
+                if (Array.isArray(parsed.characters)) chars = parsed.characters;
+                else if (parsed.characters) chars = [parsed.characters];
+                setSsoCharacters(chars);
+            } catch (e) { console.error("Session parse error", e); }
+        } else {
+            setUserSession(null);
+            setSsoCharacters([]);
+        }
+    };
 
     // Save servers on change
     useEffect(() => {
@@ -43,7 +160,7 @@ const Servers = () => {
         } catch (e) { console.error('Error loading nick', e); }
     };
 
-    const queryServer = async (address) => {
+    const queryServer = useCallback(async (address) => {
         setLoading(prev => ({ ...prev, [address]: true }));
         try {
             const data = await ipcRenderer.invoke('query-server', address);
@@ -53,11 +170,11 @@ const Servers = () => {
         } finally {
             setLoading(prev => ({ ...prev, [address]: false }));
         }
-    };
+    }, []);
 
-    const refreshAll = () => {
+    const refreshAll = useCallback(() => {
         servers.forEach(s => queryServer(s.address));
-    };
+    }, [servers, queryServer]);
 
     const handleAddServer = async () => {
         if (!newServerIp) return;
@@ -67,33 +184,35 @@ const Servers = () => {
             return;
         }
         const newServer = { address, favorite: false };
-        setServers([...servers, newServer]);
+        setServers(prev => [...prev, newServer]);
         setNewServerIp('');
         setIsAddModalOpen(false);
         queryServer(address);
     };
 
-    const removeServer = (address, e) => {
+    const removeServer = useCallback((address, e) => {
         e.stopPropagation();
         if (confirm('¿Eliminar este servidor de la lista?')) {
-            setServers(servers.filter(s => s.address !== address));
-            const newData = { ...serverData };
-            delete newData[address];
-            setServerData(newData);
+            setServers(prev => prev.filter(s => s.address !== address));
+            setServerData(prev => {
+                const newData = { ...prev };
+                delete newData[address];
+                return newData;
+            });
             if (connectModalServer?.address === address) setConnectModalServer(null);
         }
-    };
+    }, [connectModalServer]);
 
-    const toggleFavorite = (address, e) => {
+    const toggleFavorite = useCallback((address, e) => {
         e.stopPropagation();
-        setServers(servers.map(s =>
+        setServers(prev => prev.map(s =>
             s.address === address ? { ...s, favorite: !s.favorite } : s
         ));
-    };
+    }, []);
 
-    const openConnectModal = (server) => {
+    const openConnectModal = useCallback((server) => {
         setConnectModalServer(server);
-    };
+    }, []);
 
     const handleConnect = async () => {
         if (!nickname) {
@@ -116,6 +235,46 @@ const Servers = () => {
         setConnectModalServer(null);
     };
 
+    const handleSSOConnect = async (char) => {
+        if (isLaunching) return;
+        setIsLaunching(true);
+
+        const gamePath = localStorage.getItem('gtapath');
+        if (!gamePath) {
+            alert('Configura la ruta del juego en Ajustes primero.');
+            setIsLaunching(false);
+            return;
+        }
+
+        try {
+            // 1. Request SSO Token
+            // TODO: Use Config
+            const res = await fetch('http://localhost:3001/api/auth/sso-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: userSession.user.id, characterName: char.Nombre_Apellido, characterId: char.ID })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                // 2. Set Registry Name to Character Name
+                await ipcRenderer.invoke('set-registry-value', 'HKCU\\Software\\SAMP', 'PlayerName', char.Nombre_Apellido);
+                ipcRenderer.send('update-player-name', char.Nombre_Apellido);
+
+                // 3. Launch
+                ipcRenderer.send('launch-game', gamePath, connectModalServer.address);
+                setConnectModalServer(null);
+            } else {
+                alert('Error de autorización: ' + data.error);
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Error conectando con el servidor de autenticación.');
+        } finally {
+            setIsLaunching(false);
+        }
+    };
+
     const sortedServers = [...servers].sort((a, b) => {
         if (a.favorite === b.favorite) return 0;
         return a.favorite ? -1 : 1;
@@ -133,396 +292,256 @@ const Servers = () => {
     const maxPlayers = modalData?.maxPlayers || 0;
     const fillPercent = maxPlayers > 0 ? (playerCount / maxPlayers) * 100 : 0;
 
+
+    // Helper to identify Official Servers
+    const isOfficialServer = (address) => {
+        if (!address) return false;
+        // Check for official domains and local dev environments
+        const official = ['samp.seoul-rp.net:7777', '127.0.0.1:7777', 'localhost:7777'];
+        return official.includes(address) || address.includes('seoul-rp.net');
+    };
+
     return (
-        <div className="servers-container animate-fade-in">
-            <div className="header">
+        <div className="h-full flex flex-col p-10 overflow-hidden text-white relative">
+            {/* Background Gradient */}
+            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-bl from-indigo-900/20 via-purple-900/10 to-transparent blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+
+            <div className="flex justify-between items-end mb-8 relative z-10 flex-shrink-0">
                 <div>
-                    <h2 className="page-title"><Server className="icon-title" /> Servidores</h2>
-                    <p className="page-subtitle">Gestiona tus servidores favoritos de SA-MP.</p>
+                    <h2 className="text-3xl font-black flex items-center gap-3 mb-2 tracking-tight">
+                        <Server className="text-indigo-500" size={32} />
+                        <span className="bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+                            Servidores
+                        </span>
+                    </h2>
+                    <p className="text-gray-400 text-sm">Gestiona tus servidores favoritos de SA-MP.</p>
                 </div>
-                <div className="header-actions">
-                    <button className="btn-icon" onClick={refreshAll} title="Refrescar todos">
+                <div className="flex gap-3">
+                    <button
+                        className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-colors border border-white/5"
+                        onClick={refreshAll}
+                        title="Refrescar todo"
+                    >
                         <RefreshCw size={20} />
                     </button>
-                    <button className="btn-primary" onClick={() => setIsAddModalOpen(true)}>
+                    <button
+                        className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30"
+                        onClick={() => setIsAddModalOpen(true)}
+                    >
                         <Plus size={18} /> AÑADIR SERVIDOR
                     </button>
                 </div>
             </div>
 
-            <div className="servers-list">
-                <div className="list-header">
-                    <div className="col-status"></div>
-                    <div className="col-name">Nombre</div>
-                    <div className="col-ip">IP / Puerto</div>
-                    <div className="col-mode">Modo</div>
-                    <div className="col-players">Jugadores</div>
-                    <div className="col-ping">Ping</div>
-                    <div className="col-actions"></div>
-                </div>
+            {/* HEADER COLUMNS */}
+            <div className="flex px-4 py-2 text-[10px] uppercase font-bold text-gray-500 tracking-wider relative z-10 flex-shrink-0">
+                <div className="w-8"></div>
+                <div className="flex-grow">Nombre / IP</div>
+                <div className="w-24 text-right">Jugadores</div>
+                <div className="w-16 text-right">Ping</div>
+                <div className="w-24"></div> {/* Actions Spacer */}
+            </div>
 
+            {/* LIST LAYOUT */}
+            <div className="flex-grow overflow-y-auto pr-4 -mr-4 relative z-10">
                 {sortedServers.length === 0 ? (
-                    <div className="empty-state">
-                        <Server size={48} opacity={0.2} />
-                        <p>No tienes servidores guardados.</p>
+                    <div className="flex flex-col items-center justify-center py-20 text-gray-600">
+                        <Server size={64} strokeWidth={1} className="mb-4 opacity-50" />
+                        <p className="text-lg font-medium">No tienes servidores guardados.</p>
                     </div>
                 ) : (
-                    sortedServers.map((server) => {
-                        const data = serverData[server.address] || {};
-                        const isLoading = loading[server.address];
-                        const isOnline = data.online;
-
-                        return (
-                            <motion.div
-                                key={server.address}
-                                className={`server-row ${server.favorite ? 'favorite' : ''}`}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                layout
-                                onClick={() => openConnectModal(server)}
-                            >
-                                <div className="col-status">
-                                    <div className={`status-dot ${isOnline ? 'online' : 'offline'}`} title={isOnline ? 'Online' : 'Offline'} />
-                                </div>
-                                <div className="col-name">
-                                    {isLoading ? (
-                                        <span className="loading-text">Cargando info...</span>
-                                    ) : (
-                                        <span className="hostname">{data.hostname || 'Sin información'}</span>
-                                    )}
-                                </div>
-                                <div className="col-ip">{server.address}</div>
-                                <div className="col-mode">{data.gamemode || '-'}</div>
-                                <div className="col-players">
-                                    {isOnline ? (
-                                        <span className="player-count">
-                                            {data.players}/{data.maxPlayers}
-                                        </span>
-                                    ) : '-'}
-                                </div>
-                                <div className="col-ping">
-                                    {isOnline ? (
-                                        <span className={`ping-badge ${data.ping < 100 ? 'good' : data.ping < 200 ? 'med' : 'bad'}`}>
-                                            {data.ping}ms
-                                        </span>
-                                    ) : '-'}
-                                </div>
-                                <div className="col-actions">
-                                    <button
-                                        className={`action-btn fav ${server.favorite ? 'active' : ''}`}
-                                        onClick={(e) => toggleFavorite(server.address, e)}
-                                    >
-                                        <Star size={16} fill={server.favorite ? "currentColor" : "none"} />
-                                    </button>
-                                    <button
-                                        className="action-btn delete"
-                                        onClick={(e) => removeServer(server.address, e)}
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
-                                </div>
-                            </motion.div>
-                        );
-                    })
+                    <AnimatePresence initial={false}>
+                        {sortedServers.map((server, index) => (
+                            <ServerRow
+                                key={`${server.address}-${index}`}
+                                server={server}
+                                data={serverData[server.address] || {}}
+                                isLoading={loading[server.address]}
+                                isOnline={serverData[server.address]?.online}
+                                onConnect={openConnectModal}
+                                onToggleFav={toggleFavorite}
+                                onRemove={removeServer}
+                            />
+                        ))}
+                    </AnimatePresence>
                 )}
             </div>
 
             <AnimatePresence>
                 {/* Add Server Modal */}
                 {isAddModalOpen && (
-                    <div className="modal-overlay">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
                         <motion.div
-                            className="modal-content"
+                            className="bg-[#18181b] p-6 rounded-2xl w-full max-w-md border border-white/10 shadow-2xl"
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
                         >
-                            <h3>Añadir Nuevo Servidor</h3>
+                            <h3 className="text-xl font-bold text-white mb-4">Añadir Servidor</h3>
                             <input
                                 type="text"
                                 placeholder="IP:Puerto (ej: 127.0.0.1:7777)"
-                                className="input-text"
+                                className="w-full bg-[#121214] border border-white/10 rounded-xl px-4 py-3 text-white mb-6 focus:border-indigo-500 focus:outline-none transition-colors font-mono"
                                 value={newServerIp}
                                 onChange={(e) => setNewServerIp(e.target.value)}
                                 autoFocus
                             />
-                            <div className="modal-actions">
-                                <button className="btn-secondary" onClick={() => setIsAddModalOpen(false)}>Cancelar</button>
-                                <button className="btn-primary" onClick={handleAddServer}>Añadir</button>
+                            <div className="flex justify-end gap-3">
+                                <button className="px-4 py-2 rounded-lg text-gray-400 hover:bg-white/5 transition-colors" onClick={() => setIsAddModalOpen(false)}>Cancelar</button>
+                                <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold transition-colors" onClick={handleAddServer}>Añadir</button>
                             </div>
                         </motion.div>
                     </div>
                 )}
 
-                {/* Premium Connect Modal */}
+                {/* Connect Modal (Same Premium Design) */}
                 {connectModalServer && (
-                    <div className="modal-overlay glass-heavy">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
                         <motion.div
-                            className="premium-modal"
-                            initial={{ y: 50, opacity: 0, scale: 0.9 }}
+                            className="bg-[#18181b] w-full max-w-lg rounded-3xl overflow-hidden border border-white/10 shadow-2xl relative"
+                            initial={{ y: 50, opacity: 0, scale: 0.95 }}
                             animate={{ y: 0, opacity: 1, scale: 1 }}
-                            exit={{ y: 50, opacity: 0, scale: 0.9 }}
-                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                            exit={{ y: 50, opacity: 0, scale: 0.95 }}
                         >
-                            <button className="close-btn-premium" onClick={() => setConnectModalServer(null)}>
-                                <X size={24} />
+                            <button
+                                className="absolute top-4 right-4 p-2 rounded-full bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors z-20"
+                                onClick={() => setConnectModalServer(null)}
+                            >
+                                <X size={20} />
                             </button>
 
-                            {/* Hero Header */}
-                            <div className="pm-header">
-                                <div className={`pm-status-indicator ${isOnline ? 'on' : 'off'}`}>
-                                    {isOnline ? 'ONLINE' : 'OFFLINE'}
+                            {/* Header */}
+                            <div className="relative p-10 text-center bg-gradient-to-b from-indigo-900/20 to-transparent">
+                                <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider mb-6 border ${isOnline ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`}></span>
+                                    {isOnline ? 'Online' : 'Offline'}
                                 </div>
-                                <div className="pm-icon-wrapper">
-                                    <Globe size={40} className="pm-icon" />
+
+                                <h2 className="text-2xl font-black text-white mb-2 leading-tight">{modalData?.hostname || 'Servidor Desconocido'}</h2>
+                                <p className="text-indigo-400 font-mono text-sm font-medium bg-indigo-500/10 inline-block px-3 py-1 rounded-lg">
+                                    {connectModalServer.address}
+                                </p>
+                            </div>
+
+                            {/* Players Bar */}
+                            <div className="h-1 w-full bg-white/5">
+                                <div className="h-full bg-indigo-500 transition-all duration-1000" style={{ width: `${fillPercent}%` }}></div>
+                            </div>
+
+                            {/* Stats */}
+                            <div className="grid grid-cols-2 divide-x divide-white/5 border-b border-white/5 bg-[#121214]/50">
+                                <div className="p-4 text-center">
+                                    <div className="text-xs text-gray-500 uppercase font-black tracking-wider mb-1">Latencia</div>
+                                    <div className="text-emerald-400 font-mono font-bold">{modalData?.ping || '-'}ms</div>
                                 </div>
-                                <h2 className="pm-title">{modalData?.hostname || 'Unknown Server'}</h2>
-                                <div className="pm-address">
-                                    <span>{connectModalServer.address}</span>
+                                <div className="p-4 text-center">
+                                    <div className="text-xs text-gray-500 uppercase font-black tracking-wider mb-1">Jugadores</div>
+                                    <div className="text-white font-mono font-bold">{playerCount}/{maxPlayers}</div>
                                 </div>
                             </div>
 
-                            {/* Stats Bar */}
-                            <div className="pm-stats">
-                                <div className="pm-stat-box">
-                                    <Activity size={16} className="stat-icon" />
-                                    <div className="stat-info">
-                                        <span className="stat-val">{modalData?.ping || '-'}ms</span>
-                                        <span className="stat-label">Latencia</span>
+                            {/* Body */}
+                            <div className="p-8">
+                                {userSession && isOfficialServer(connectModalServer.address) ? (
+                                    <div className="animate-fade-in">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Selecciona Personaje</h4>
+                                            <span className="text-[10px] bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded border border-indigo-500/20">
+                                                {userSession.user.name}
+                                            </span>
+                                        </div>
+
+                                        <div className="max-h-[220px] overflow-y-auto pr-2 -mr-2">
+                                            <CharacterSelector
+                                                characters={ssoCharacters}
+                                                onSelect={handleSSOConnect}
+                                                onManage={() => setShowCreateCharModal(true)}
+                                            />
+                                            {isLaunching && <div className="text-center text-xs text-indigo-400 mt-4 font-mono animate-pulse">Iniciando juego...</div>}
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="pm-stat-box">
-                                    <User size={16} className="stat-icon" />
-                                    <div className="stat-info">
-                                        <span className="stat-val">{playerCount}/{maxPlayers}</span>
-                                        <span className="stat-label">Jugadores</span>
+                                ) : (
+                                    <div className="space-y-6">
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Tu Nombre de Jugador</label>
+                                            <div className="flex items-center gap-3 bg-[#121214] border border-white/10 p-1 rounded-xl focus-within:border-indigo-500/50 transition-colors">
+                                                <div className="p-2.5 bg-white/5 rounded-lg text-gray-400">
+                                                    <User size={20} />
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    className="bg-transparent border-none text-white font-medium w-full focus:outline-none"
+                                                    value={nickname}
+                                                    placeholder="Nombre_Apellido"
+                                                    onChange={(e) => setNickname(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            className="w-full py-4 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-900/20 hover:shadow-indigo-500/30 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+                                            onClick={handleConnect}
+                                        >
+                                            <Play fill="currentColor" size={18} />
+                                            CONECTAR AHORA
+                                        </button>
+
+                                        {isOfficialServer(connectModalServer.address) && (
+                                            <div className="flex gap-3 pt-6 border-t border-white/5">
+                                                <button
+                                                    className="flex-1 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold text-gray-400 hover:text-white transition-colors"
+                                                    onClick={() => alert("Función Login pendiente.")}
+                                                >
+                                                    YA TENGO CUENTA
+                                                </button>
+                                                <button
+                                                    className="flex-1 py-2.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-xs font-bold text-indigo-400 hover:text-indigo-300 transition-colors border border-indigo-500/20"
+                                                    onClick={() => { setConnectModalServer(null); setShowRegisterModal(true); }}
+                                                >
+                                                    CREAR CUENTA
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
-
+                                )}
                             </div>
-
-                            {/* Player Progress Visual */}
-                            <div className="pm-progress-container">
-                                <div className="pm-progress-bar" style={{ width: `${fillPercent}%` }}></div>
-                            </div>
-
-                            <div className="pm-body">
-                                <div className="pm-input-group">
-                                    <label>TU NOMBRE DE JUGADOR</label>
-                                    <div className="pm-input-wrapper">
-                                        <User size={20} className="pm-input-icon" />
-                                        <input
-                                            type="text"
-                                            className="pm-input"
-                                            value={nickname}
-                                            placeholder="Nombre_Apellido"
-                                            onChange={(e) => setNickname(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-
-                                <button className="pm-connect-btn" onClick={handleConnect}>
-                                    <Play fill="currentColor" size={20} />
-                                    <span>CONECTAR AL SERVIDOR</span>
-                                    <div className="pm-btn-shine"></div>
-                                </button>
-                            </div>
-
                         </motion.div>
                     </div>
                 )}
             </AnimatePresence>
 
-            <style>{`
-                /* ... Keep existing styles for list ... */
-                .servers-container { padding: 40px; height: 100%; overflow-y: auto; color: white; }
-                .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; }
-                .page-title { display: flex; align-items: center; gap: 12px; font-size: 28px; margin-bottom: 5px; font-weight: 700; }
-                .icon-title { color: var(--accent-primary); }
-                .page-subtitle { color: var(--text-muted); font-size: 14px; }
-                
-                .header-actions { display: flex; gap: 10px; }
-                .btn-icon { background: rgba(255,255,255,0.05); border: none; width: 40px; height: 40px; border-radius: 8px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; }
-                .btn-icon:hover { background: rgba(255,255,255,0.1); }
-                
-                .btn-primary { background: var(--accent-primary); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; transition: filter 0.2s; }
-                .btn-primary:hover { filter: brightness(1.2); }
+            {/*Auth Modals*/}
+            <AnimatePresence>
+                <CharacterCreatorModal
+                    isOpen={showCreateCharModal}
+                    onClose={() => setShowCreateCharModal(false)}
+                    userId={userSession?.user?.id}
+                    onCreateSuccess={() => {
+                        const saved = localStorage.getItem('user_session');
+                        if (saved) {
+                            const parsed = JSON.parse(saved);
+                            fetch(`http://localhost:3001/api/user/${parsed.user.id}/refresh`)
+                                .then(r => r.json())
+                                .then(fresh => {
+                                    setUserSession(fresh);
+                                    localStorage.setItem('user_session', JSON.stringify(fresh));
+                                    setSsoCharacters(Array.isArray(fresh.characters) ? fresh.characters : [fresh.characters]);
+                                    setShowCreateCharModal(false);
+                                })
+                                .catch(err => console.error(err));
+                        }
+                    }}
+                />
 
-                .servers-list { background: rgba(0,0,0,0.2); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); }
-                .list-header { display: flex; background: rgba(255,255,255,0.03); padding: 15px 20px; font-size: 12px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 1px; }
-                
-                .server-row { display: flex; align-items: center; padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s; cursor: pointer; }
-                .server-row:hover { background: rgba(255,255,255,0.05); }
-                .server-row.favorite { background: linear-gradient(90deg, rgba(234, 179, 8, 0.05), transparent); border-left: 2px solid #eab308; }
-                
-                .col-status { width: 40px; display: flex; justify-content: center; }
-                .col-name { flex: 2; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 20px; }
-                .col-ip { flex: 1; color: var(--text-muted); font-family: monospace; font-size: 13px; }
-                .col-mode { flex: 1; color: var(--text-muted); font-size: 13px; }
-                .col-players { width: 100px; text-align: center; font-variant-numeric: tabular-nums; }
-                .col-ping { width: 80px; text-align: center; }
-                .col-actions { width: 100px; display: flex; justify-content: flex-end; gap: 8px; opacity: 0; transition: opacity 0.2s; }
-                .server-row:hover .col-actions { opacity: 1; }
-
-                .status-dot { width: 8px; height: 8px; border-radius: 50%; }
-                .status-dot.online { background: #4ade80; box-shadow: 0 0 10px rgba(74, 222, 128, 0.5); }
-                .status-dot.offline { background: #ef4444; }
-
-                .hostname { color: #f1f5f9; }
-                .loading-text { color: var(--text-muted); font-style: italic; }
-
-                .ping-badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 700; min-width: 40px; display: inline-block; }
-                .ping-badge.good { color: #4ade80; background: rgba(74, 222, 128, 0.1); }
-                .ping-badge.med { color: #facc15; background: rgba(250, 204, 21, 0.1); }
-                .ping-badge.bad { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
-
-                .action-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 6px; border-radius: 6px; transition: all 0.2s; }
-                .action-btn:hover { background: rgba(255,255,255,0.1); color: white; }
-                .action-btn.fav.active { color: #eab308; }
-                .action-btn.delete:hover { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
-
-                .empty-state { padding: 60px; text-align: center; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 20px; }
-
-                .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(5px); }
-                .modal-content { background: #1e1e24; padding: 30px; border-radius: 16px; width: 400px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
-                .modal-content h3 { margin-bottom: 20px; font-size: 20px; }
-                .input-text { width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); padding: 12px; border-radius: 8px; color: white; margin-bottom: 20px; font-family: monospace; }
-                
-                .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
-                .btn-secondary { background: rgba(255,255,255,0.05); border: none; padding: 10px 20px; border-radius: 8px; color: white; cursor: pointer; }
-
-                /* NEW PREMIUM MODAL STYLES */
-                .glass-heavy { backdrop-filter: blur(15px); background: rgba(0,0,0,0.85); }
-                
-                .premium-modal {
-                    width: 500px;
-                    background: linear-gradient(165deg, #18181b 0%, #09090b 100%);
-                    border-radius: 24px;
-                    border: 1px solid rgba(255,255,255,0.08);
-                    box-shadow: 0 0 50px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05);
-                    overflow: hidden;
-                    position: relative;
-                }
-
-                .close-btn-premium {
-                    position: absolute;
-                    top: 20px;
-                    right: 20px;
-                    background: rgba(255,255,255,0.05);
-                    border: none;
-                    color: rgba(255,255,255,0.5);
-                    width: 36px;
-                    height: 36px;
-                    border-radius: 50%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    z-index: 10;
-                }
-                .close-btn-premium:hover { background: rgba(255,255,255,0.1); color: white; transform: rotate(90deg); }
-
-                .pm-header {
-                    padding: 40px 40px 30px;
-                    text-align: center;
-                    background: radial-gradient(circle at top, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
-                    position: relative;
-                }
-                
-                .pm-status-indicator {
-                    position: absolute;
-                    top: 24px;
-                    left: 24px;
-                    font-size: 10px;
-                    font-weight: 800;
-                    padding: 4px 10px;
-                    border-radius: 20px;
-                    letter-spacing: 1px;
-                }
-                .pm-status-indicator.on { background: rgba(74, 222, 128, 0.1); color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.2); box-shadow: 0 0 15px rgba(74, 222, 128, 0.1); }
-                .pm-status-indicator.off { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
-
-                .pm-icon-wrapper {
-                    width: 80px;
-                    height: 80px;
-                    background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02));
-                    border-radius: 24px;
-                    margin: 0 auto 20px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-                    border: 1px solid rgba(255,255,255,0.1);
-                }
-                .pm-icon { color: var(--accent-primary); filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.5)); }
-
-                .pm-title { font-size: 22px; font-weight: 800; color: white; margin-bottom: 8px; line-height: 1.2; text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
-                .pm-address { font-family: monospace; color: var(--accent-primary); background: rgba(99, 102, 241, 0.1); display: inline-block; padding: 4px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; }
-
-                .pm-stats { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); }
-                .pm-stat-box { padding: 15px; display: flex; flex-direction: column; align-items: center; gap: 8px; border-right: 1px solid rgba(255,255,255,0.05); }
-                .pm-stat-box:last-child { border-right: none; }
-                .stat-icon { color: var(--text-muted); opacity: 0.5; }
-                .stat-info { display: flex; flex-direction: column; align-items: center; }
-                .stat-val { color: white; font-weight: 700; font-size: 14px; }
-                .stat-label { color: var(--text-muted); font-size: 10px; text-transform: uppercase; font-weight: 600; margin-top: 2px; }
-
-                .pm-progress-container { height: 4px; background: rgba(255,255,255,0.05); width: 100%; position: relative; }
-                .pm-progress-bar { height: 100%; background: var(--accent-primary); box-shadow: 0 0 10px var(--accent-primary); transition: width 1s ease-out; }
-
-                .pm-body { padding: 30px 40px; }
-                
-                .pm-input-group label { display: block; font-size: 11px; font-weight: 800; color: var(--text-muted); margin-bottom: 12px; letter-spacing: 1px; }
-                .pm-input-wrapper { position: relative; background: rgba(0,0,0,0.3); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); transition: all 0.3s; padding: 4px; display: flex; align-items: center; }
-                .pm-input-wrapper:focus-within { border-color: var(--accent-primary); box-shadow: 0 0 20px rgba(99, 102, 241, 0.15); background: rgba(0,0,0,0.5); transform: translateY(-1px); }
-                
-                .pm-input-icon { color: var(--text-muted); margin: 0 12px; }
-                .pm-input { background: transparent; border: none; width: 100%; color: white; padding: 12px 0; font-weight: 600; font-size: 15px; outline: none; }
-                .pm-input::placeholder { color: rgba(255,255,255,0.2); }
-
-                .pm-connect-btn {
-                    margin-top: 24px;
-                    width: 100%;
-                    background: linear-gradient(135deg, var(--accent-primary), #4f46e5);
-                    border: none;
-                    padding: 16px;
-                    border-radius: 12px;
-                    color: white;
-                    font-weight: 800;
-                    font-size: 14px;
-                    letter-spacing: 1px;
-                    cursor: pointer;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 12px;
-                    position: relative;
-                    overflow: hidden;
-                    transition: all 0.2s;
-                    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
-                }
-                .pm-connect-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(99, 102, 241, 0.5); }
-                .pm-connect-btn:active { transform: translateY(1px); }
-                
-                .pm-btn-shine {
-                    position: absolute;
-                    top: 0;
-                    left: -100%;
-                    width: 50%;
-                    height: 100%;
-                    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-                    transform: skewX(-20deg);
-                    animation: shine 3s infinite;
-                }
-                
-                @keyframes shine {
-                    0% { left: -100%; }
-                    20% { left: 200%; }
-                    100% { left: 200%; }
-                }
-
-            `}</style>
+                <RegistrationModal
+                    isOpen={showRegisterModal}
+                    onClose={() => setShowRegisterModal(false)}
+                    onRegisterSuccess={(userId, username) => {
+                        alert(`Cuenta creada con éxito! Usuario: ${username}`);
+                        // Future: Auto-login logic
+                    }}
+                />
+            </AnimatePresence>
         </div>
     );
 };

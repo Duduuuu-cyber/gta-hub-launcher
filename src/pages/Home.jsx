@@ -2,7 +2,9 @@ import React from 'react';
 import { Play, Zap, Star, Gift, Megaphone, Calendar, User } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import PlayLoadingScreen from '../components/PlayLoadingScreen';
-
+import CharacterSelector from '../components/CharacterSelector';
+import CharacterCreatorModal from '../components/CharacterCreatorModal';
+import WelcomeGiftModal from '../components/WelcomeGiftModal';
 import VideoSpotlight from '../components/VideoSpotlight';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: { send: () => { }, on: () => { }, removeListener: () => { }, invoke: () => { } } };
@@ -26,7 +28,6 @@ const DEFAULT_NEWS = [
   }
 ];
 
-// URL del JSON de noticias (Cámbiala por tu URL real de GitHub/Pastebin)
 const NEWS_API_URL = 'https://raw.githubusercontent.com/Duduuuu-cyber/gta-hub-launcher/refs/heads/main/news.json';
 
 const Home = () => {
@@ -35,7 +36,22 @@ const Home = () => {
   const [news, setNews] = React.useState(DEFAULT_NEWS);
   const [isLaunching, setIsLaunching] = React.useState(false);
 
+  // --------------------------------------------------------------------------
+  // SSO Logic
+  // --------------------------------------------------------------------------
+  const [userSession, setUserSession] = React.useState(null);
+  const [showCharModal, setShowCharModal] = React.useState(false);
+  const [ssoCharacters, setSsoCharacters] = React.useState([]);
 
+  // --------------------------------------------------------------------------
+  // Gift Logic
+  // --------------------------------------------------------------------------
+  const [showGiftModal, setShowGiftModal] = React.useState(false);
+
+  // --------------------------------------------------------------------------
+  // Character Creator Logic
+  // --------------------------------------------------------------------------
+  const [showCreateCharModal, setShowCreateCharModal] = React.useState(false);
 
   React.useEffect(() => {
     // Initial fetch server info
@@ -45,63 +61,93 @@ const Home = () => {
     const rpcEnabled = localStorage.getItem('discordRpc') !== 'false';
     ipcRenderer.send('toggle-discord-rpc', rpcEnabled);
 
-    // Load Player Name from Registry
-    const loadRegistry = async () => {
-      try {
-        const name = await ipcRenderer.invoke('get-registry-value', 'HKCU\\Software\\SAMP', 'PlayerName');
-        if (name) {
-          setPlayerName(name);
-          ipcRenderer.send('update-player-name', name);
+    // Load Session if exists
+    const loadSession = () => {
+      const saved = localStorage.getItem('user_session');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          // Refresh data silently to get latest bans/chars
+          setUserSession(parsed);
+          // Process Characters
+          let chars = [];
+          if (Array.isArray(parsed.characters)) chars = parsed.characters;
+          else if (parsed.characters) chars = [parsed.characters];
+          setSsoCharacters(chars);
+
+          // Check Gift Status
+          if (parsed.user && parsed.user.giftClaimed === 0) {
+            setTimeout(() => setShowGiftModal(true), 1500); // Delay for effect
+          }
+
+          // Fetch fresh properties
+          fetch(`http://localhost:3001/api/user/${parsed.user.id}/refresh`)
+            .then(r => r.json())
+            .then(fresh => {
+              if (fresh.success) {
+                setUserSession(fresh);
+                localStorage.setItem('user_session', JSON.stringify(fresh));
+                setSsoCharacters(Array.isArray(fresh.characters) ? fresh.characters : [fresh.characters]);
+
+                // Re-check gift in case it changed server-side
+                if (fresh.user.giftClaimed === 0) {
+                  setShowGiftModal(true);
+                }
+              }
+            })
+            .catch(err => console.log("Silent Refresh Error:", err));
+
+        } catch (e) {
+          console.error("Session parse error", e);
         }
-      } catch (err) {
-        console.error('Error loading registry:', err);
+      } else {
+        // Not logged in -> Load Registry Name
+        loadRegistry();
       }
     };
-    loadRegistry();
+
+    loadSession();
+    window.addEventListener('auth-change', loadSession);
 
     // Fetch News dynamically
     const fetchNews = async () => {
       try {
-        // Add timestamp to query to bypass GitHub raw cache
         const response = await fetch(`${NEWS_API_URL}?t=${new Date().getTime()}`);
         if (response.ok) {
           const data = await response.json();
-          if (Array.isArray(data) && data.length > 0) {
-            setNews(data);
-          }
+          if (Array.isArray(data) && data.length > 0) setNews(data);
         }
-      } catch (error) {
-        console.log('Using default news due to fetch error:', error);
-      }
+      } catch (error) { console.log('News error:', error); }
     };
     fetchNews();
 
     // Listen for updates
-    const handleUpdate = (event, data) => {
-      setServerData(data);
-    };
-
+    const handleUpdate = (event, data) => setServerData(data);
     ipcRenderer.on('server-info-reply', handleUpdate);
 
     // Poll every 5 seconds
-    const interval = setInterval(() => {
-      ipcRenderer.send('get-server-info');
-    }, 5000);
+    const interval = setInterval(() => ipcRenderer.send('get-server-info'), 5000);
 
-
+    return () => {
+      clearInterval(interval);
+      ipcRenderer.removeListener('server-info-reply', handleUpdate);
+      window.removeEventListener('auth-change', loadSession);
+    };
   }, []);
 
-
+  const loadRegistry = async () => {
+    try {
+      const name = await ipcRenderer.invoke('get-registry-value', 'HKCU\\Software\\SAMP', 'PlayerName');
+      if (name) {
+        setPlayerName(name);
+        ipcRenderer.send('update-player-name', name);
+      }
+    } catch (err) { console.error('Error loading registry:', err); }
+  };
 
   /* Prevent spam clicking play */
   const handlePlay = () => {
     if (isLaunching) return;
-
-    // 1. Validator: Player Name needed
-    if (!playerName || playerName.trim().length === 0) {
-      alert('Debes ingresar un nombre de usuario para jugar.');
-      return;
-    }
 
     // 2. Validator: Game Path needed
     const path = localStorage.getItem('gtapath');
@@ -110,40 +156,138 @@ const Home = () => {
       return;
     }
 
-    // 3. Start Loading (Blocks UI)
-    setIsLaunching(true);
+    // 3. Logic: If Logged In -> Show Char Modal. If Guest -> Launch directly.
+    if (userSession) {
+      setShowCharModal(true);
+    } else {
+      // Guest Flow
+      if (!playerName || playerName.trim().length === 0) {
+        alert('Debes ingresar un nombre de usuario para jugar.');
+        return;
+      }
+      launchGame(playerName);
+    }
   };
 
-  const handleLaunchComplete = React.useCallback(() => {
-    const path = localStorage.getItem('gtapath');
-    if (path) {
-      // Send launch signal
-      ipcRenderer.send('launch-game', path);
+  const handleSSOLaunch = async (charName, charId) => {
+    setShowCharModal(false);
+    setIsLaunching(true); // UI Block
+
+    try {
+      // 1. Request SSO Token
+      const res = await fetch('http://localhost:3001/api/auth/sso-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: userSession.user.id, characterName: charName, characterId: charId })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        // 2. Launch Game with authorized IP
+        launchGame(charName);
+      } else {
+        alert('Error de autorización: ' + data.error);
+        setIsLaunching(false);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error conectando con el servidor de autenticación.');
+      setIsLaunching(false);
+    }
+  };
+
+  const launchGame = async (name) => {
+    setIsLaunching(true);
+
+    // ALWAYS update Registry Name (SAMP Client reads this)
+    if (name) {
+      try {
+        await ipcRenderer.invoke('set-registry-value', 'HKCU\\Software\\SAMP', 'PlayerName', name);
+        console.log('[Home] Registry PlayerName updated to:', name);
+      } catch (e) {
+        console.error('[Home] Registry update failed:', e);
+      }
     }
 
-    // Cooldown: Keep isLaunching true for a few extra seconds to prevent immediate re-launch
-    // This also gives time for the game window to appear
-    setTimeout(() => {
-      setIsLaunching(false);
-    }, 10000);
-  }, []);
+    // Update local name for display (Discord RPC, etc)
+    ipcRenderer.send('update-player-name', name);
 
-  const savePlayerName = () => {
-    // Save to Registry
-    if (playerName) {
-      ipcRenderer.invoke('set-registry-value', 'HKCU\\Software\\SAMP', 'PlayerName', playerName);
+    const path = localStorage.getItem('gtapath');
+    if (path) ipcRenderer.send('launch-game', path);
+
+    setTimeout(() => setIsLaunching(false), 10000);
+  };
+
+  const handleCreateSuccess = () => {
+    // Refresh session to get new character
+    const saved = localStorage.getItem('user_session');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      fetch(`http://localhost:3001/api/user/${parsed.user.id}/refresh`)
+        .then(r => r.json())
+        .then(fresh => {
+          if (fresh.success) {
+            setUserSession(fresh);
+            localStorage.setItem('user_session', JSON.stringify(fresh));
+            setSsoCharacters(Array.isArray(fresh.characters) ? fresh.characters : [fresh.characters]);
+
+            // Re-open selection modal
+            setShowCreateCharModal(false);
+            setShowCharModal(true);
+          }
+        })
+        .catch(err => console.log("Refresh Error:", err));
     }
   };
 
   return (
-    <div className="home-container animate-fade-in">
+    <div className="home-container animate-fade-in relative">
+      {/* Modal Portals */}
+      {showCharModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setShowCharModal(false)}>
+          <div className="bg-[#18181b] border border-white/10 rounded-2xl w-full max-w-4xl p-8 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-3xl font-black text-white mb-2">Selecciona tu Personaje</h2>
+            <p className="text-gray-400 mb-8">Debes elegir un personaje activo para entrar al servidor.</p>
+            <CharacterSelector
+              characters={ssoCharacters}
+              onSelect={(char) => handleSSOLaunch(char.Nombre_Apellido, char.ID)}
+              onManage={() => { setShowCharModal(false); setShowCreateCharModal(true); }}
+            />
+            <button
+              onClick={() => setShowCharModal(false)}
+              className="mt-8 w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-500 font-bold rounded-xl transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      <CharacterCreatorModal
+        isOpen={showCreateCharModal}
+        onClose={() => { setShowCreateCharModal(false); setShowCharModal(true); }}
+        userId={userSession?.user?.id}
+        onCreateSuccess={handleCreateSuccess}
+      />
+
+      <WelcomeGiftModal
+        isOpen={showGiftModal}
+        onClose={() => setShowGiftModal(false)}
+        userId={userSession?.user?.id}
+        onClaimSuccess={(newBalance) => {
+          // Update local balance immediately
+          if (userSession) {
+            const updated = { ...userSession, user: { ...userSession.user, coins: newBalance, giftClaimed: 1 } };
+            setUserSession(updated);
+            localStorage.setItem('user_session', JSON.stringify(updated));
+          }
+        }}
+      />
+
       <AnimatePresence>
-        {isLaunching && <PlayLoadingScreen onComplete={handleLaunchComplete} />}
-
-
+        {isLaunching && <PlayLoadingScreen onComplete={() => { }} />}
       </AnimatePresence>
 
-      {/* Background with Gradient Mesh (simulated via CSS) */}
       <div className="bg-gradient-mesh" />
 
       <div className="content">
@@ -164,7 +308,7 @@ const Home = () => {
               La experiencia de Roleplay definitiva. Únete ahora y forja tu destino.
             </p>
 
-            {/* XP Bonus Indicators - Detect from Hostname */}
+            {/* XP Bonus Indicators */}
             {(serverData.hostname && (serverData.hostname.includes('[x2 EXP]') || serverData.hostname.includes('[X5 EXP]'))) && (
               <div className="xp-bonus-container animate-bounce-subtle">
                 {serverData.hostname.includes('[x2 EXP]') && (
@@ -182,30 +326,43 @@ const Home = () => {
               </div>
             )}
 
-            <div className="player-input-group">
-              <div className="input-wrapper">
-                <User size={18} className="input-icon" />
-                <input
-                  type="text"
-                  className="cyber-input"
-                  placeholder="Nombre_Apellido"
-                  value={playerName}
-                  onChange={(e) => {
-                    const newName = e.target.value;
-                    setPlayerName(newName);
-                    ipcRenderer.send('update-player-name', newName);
-                  }}
-                  onBlur={savePlayerName}
-                />
-                <div className="input-border"></div>
+            {/* Auth-Aware Input Group */}
+            {!userSession ? (
+              <div className="player-input-group">
+                <div className="input-wrapper">
+                  <User size={18} className="input-icon" />
+                  <input
+                    type="text"
+                    className="cyber-input"
+                    placeholder="Nombre_Apellido"
+                    value={playerName}
+                    onChange={(e) => {
+                      const newName = e.target.value;
+                      setPlayerName(newName);
+                      ipcRenderer.send('update-player-name', newName);
+                    }}
+                    onBlur={() => { if (playerName) ipcRenderer.invoke('set-registry-value', 'HKCU\\Software\\SAMP', 'PlayerName', playerName); }}
+                  />
+                  <div className="input-border"></div>
+                </div>
+                <span className="input-hint">Tu identidad en el servidor (Invitado)</span>
               </div>
-              <span className="input-hint">Tu identidad en el servidor</span>
-            </div>
+            ) : (
+              <div className="mb-8 p-4 bg-indigo-900/20 border border-indigo-500/30 rounded-xl flex items-center gap-4 max-w-[400px]">
+                <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/40">
+                  {userSession.user.name ? userSession.user.name.charAt(0).toUpperCase() : '?'}
+                </div>
+                <div>
+                  <p className="text-xs text-indigo-300 font-bold uppercase tracking-wider">Sesión Activa</p>
+                  <p className="text-white font-bold">{userSession.user.name || 'Usuario'}</p>
+                </div>
+              </div>
+            )}
 
             <button className="play-btn" onClick={handlePlay} disabled={isLaunching} style={{ opacity: isLaunching ? 0.7 : 1, cursor: isLaunching ? 'not-allowed' : 'pointer' }}>
               <div className="btn-content">
                 <Play fill="currentColor" size={24} />
-                <span>{isLaunching ? 'INICIANDO...' : 'JUGAR AHORA'}</span>
+                <span>{isLaunching ? 'INICIANDO...' : (userSession ? 'SELECCIONAR PERSONAJE' : 'JUGAR AHORA')}</span>
               </div>
               <div className="btn-glow"></div>
             </button>
@@ -583,11 +740,11 @@ const Home = () => {
 
         /* News Grid */
         .news-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
-          margin-top: auto;
-          padding-top: 40px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: auto;
+            padding-top: 40px;
         }
 
         .news-card {

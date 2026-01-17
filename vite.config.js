@@ -4,6 +4,7 @@ import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
 
 // https://vitejs.dev/config/
+// Modified to force restart for Tailwind
 export default defineConfig({
   plugins: [
     react(),
