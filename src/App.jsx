@@ -230,38 +230,11 @@ function App() {
     ipcRenderer.send('install-update-now');
   };
 
-  // 1. Loading Screen
-  if (loading) {
-    return (
-      <AnimatePresence>
-        <SplashScreen key="splash" onComplete={() => setLoading(false)} />
-      </AnimatePresence>
-    );
-  }
 
-  // 2. Strict Login Guard (If not authenticated, ONLY show Login)
-  // This satisfies: "que cargue el launcher, y me muestre la pagina del LOGIN sin posibilidad de salirme"
-  if (!isAuthenticated) {
-    return (
-      <div className="app-container">
-        <TitleBar />
-        <Login />
-      </div>
-    );
-  }
 
-  // 3. First Run Wizard (Only if authenticated but not setup)
-  if (needsSetup) {
-    return (
-      <AnimatePresence>
-        <FirstRunWizard key="wizard" onComplete={handleSetupComplete} />
-      </AnimatePresence>
-    );
-  }
-
-  // 4. Main App Layout (Authenticated & Setup)
-  return (
-    <div className="app-container">
+  // Common UI Elements (Globals)
+  const GlobalUI = () => (
+    <>
       <TitleBar />
       <OfflineBlocker />
       {showUpdateModal && (
@@ -275,12 +248,52 @@ function App() {
           onInstallUpdate={handleInstallUpdate}
         />
       )}
+    </>
+  );
+
+  // 1. Loading Screen
+  if (loading) {
+    return (
+      <div className="app-container">
+        <GlobalUI />
+        <AnimatePresence>
+          <SplashScreen key="splash" onComplete={() => setLoading(false)} />
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  // 2. Strict Login Guard
+  if (!isAuthenticated) {
+    return (
+      <div className="app-container">
+        <GlobalUI />
+        <Login />
+      </div>
+    );
+  }
+
+  // 3. First Run Wizard
+  if (needsSetup) {
+    return (
+      <div className="app-container">
+        <GlobalUI />
+        <AnimatePresence>
+          <FirstRunWizard key="wizard" onComplete={handleSetupComplete} />
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  // 4. Main App Layout
+  return (
+    <div className="app-container">
+      <GlobalUI />
       <Router>
         <div className="main-layout">
           <Sidebar />
           <div className="page-content">
             <Routes>
-              {/* Default redirect to Home */}
               <Route path="/" element={<Home />} />
               <Route path="/servers" element={<Servers />} />
               <Route path="/gifts" element={<Gifts />} />
@@ -288,7 +301,6 @@ function App() {
               <Route path="/changelog" element={<Changelog />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/profile" element={<Profile />} />
-              {/* Login route redundant here but kept for fallback */}
               <Route path="/login" element={<Login />} />
             </Routes>
           </div>
@@ -305,7 +317,6 @@ function App() {
                   const newSession = { ...userSession };
                   newSession.user.coins = newBalance;
                   localStorage.setItem('user_session', JSON.stringify(newSession));
-                  // Dispatch event so other components update
                   window.dispatchEvent(new Event('auth-change'));
                 }
               }}
