@@ -7,7 +7,7 @@ const DEV_URL = 'http://localhost:3001';
 const PROD_URL = 'http://samp.seoul-rp.net:3001';
 
 // Set this to TRUE if you want to test with the VPS while running 'npm run dev'
-const USE_VPS_IN_DEV = false;
+const USE_VPS_IN_DEV = true;
 
 export const API_BASE_URL = (import.meta.env.DEV && !USE_VPS_IN_DEV) ? DEV_URL : PROD_URL;
 

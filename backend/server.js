@@ -47,7 +47,7 @@ const dbConfig = DEBUG ? {
     password: '',
     database: 'zopy'
 } : {
-    host: 'samp.seoul-rp.net',
+    host: 'localhost',
     user: 'samp',
     password: process.env.DB_PASSWORD || 'G4BRI3L!', // Securely use ENV or fallback
     database: 'samp'
@@ -403,36 +403,41 @@ app.post('/api/auth/sso-token', async (req, res) => {
         // Basic Validation
         if (!userId || !characterName || !characterId) return res.status(400).json({ success: false, error: 'Missing required fields' });
 
-        // Get IP of the requester (Launcher Client)
-        // Get REAL Public IP (Important when running backend locally)
-        let userIp = null;
-        try {
-            await new Promise((resolve) => {
-                https.get('https://api.ipify.org?format=json', (res) => {
-                    let data = '';
-                    res.on('data', chunk => data += chunk);
-                    res.on('end', () => {
-                        try {
-                            const json = JSON.parse(data);
-                            if (json.ip) {
-                                userIp = json.ip;
-                                console.log('[SSO] Resolved Public IP:', userIp);
-                            }
-                            resolve();
-                        } catch (e) { resolve(); }
-                    });
-                }).on('error', (err) => {
-                    console.error('[SSO] IP Fetch Error:', err.message);
-                    resolve();
-                });
-            });
-        } catch (e) { console.error('IP Promise Error', e); }
+        // 1. Get IP from Request (The Client's IP)
+        let userIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-        // Fallback if API fails
-        if (!userIp) {
-            userIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-            if (userIp.startsWith('::ffff:')) userIp = userIp.split(':').pop(); // Clean IPv4 from IPv6 mapping
-            if (userIp === '::1') userIp = '127.0.0.1'; // Normalize Localhost
+        // Clean IPv6 to IPv4 if needed (::ffff:127.0.0.1 -> 127.0.0.1)
+        if (userIp && userIp.startsWith('::ffff:')) {
+            userIp = userIp.split(':').pop();
+        }
+
+        console.log(`[SSO] Incoming Request IP: ${userIp}`);
+
+        // 2. If Localhost (Dev Environment), try to resolve Real Public IP via API
+        // This is needed because SA-MP Server (Remote) sees your Public IP, but Local Backend sees 127.0.0.1
+        if (!userIp || userIp === '::1' || userIp === '127.0.0.1') {
+            try {
+                console.log('[SSO] Localhost detected. Resolving Public IPv4...');
+                await new Promise((resolve) => {
+                    https.get('https://api4.ipify.org?format=json', (res) => {
+                        let data = '';
+                        res.on('data', chunk => data += chunk);
+                        res.on('end', () => {
+                            try {
+                                const json = JSON.parse(data);
+                                if (json.ip) {
+                                    userIp = json.ip;
+                                    console.log('[SSO] Resolved Public IPv4 (Dev):', userIp);
+                                }
+                                resolve();
+                            } catch (e) { resolve(); }
+                        });
+                    }).on('error', (err) => {
+                        console.error('[SSO] IP Fetch Error:', err.message);
+                        resolve();
+                    });
+                });
+            } catch (e) { console.error('IP Promise Error', e); }
         }
 
         // Generate Secure Token (8 chars hex)
