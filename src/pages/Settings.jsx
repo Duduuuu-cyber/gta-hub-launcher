@@ -29,7 +29,7 @@ const Settings = () => {
       }
 
       const regCachePath = await ipcRenderer.invoke('get-registry-value', 'HKCU\\Software\\SAMP', 'model_cache');
-      if (regCachePath) {
+      if (regCachePath && !cachePath) {
         setCachePath(regCachePath);
       }
     };
@@ -140,7 +140,7 @@ const Settings = () => {
   };
 
   const handleSave = () => {
-    localStorage.setItem('gamepath', gamePath);
+    localStorage.setItem('gtapath', gamePath);
     localStorage.setItem('cachepath', cachePath);
 
     if (gamePath) {

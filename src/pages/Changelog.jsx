@@ -6,9 +6,17 @@ const Changelog = () => {
     // Example data - normally this would fetch from a JSON
     const [changes] = useState([
         {
-            version: '1.1.1',
+            version: '1.1.2',
             date: '17 Enero 2026',
             isLatest: true,
+            features: [
+                { type: 'fix', text: 'Solucionado: Persistencia del directorio del juego en Ajustes.' }
+            ]
+        },
+        {
+            version: '1.1.1',
+            date: '17 Enero 2026',
+            isLatest: false,
             features: [
                 { type: 'improve', text: 'Arquitectura Backend Actualizada: Conexión VPS.' },
                 { type: 'fix', text: 'Solución definitiva a error de conexión en builds.' },
