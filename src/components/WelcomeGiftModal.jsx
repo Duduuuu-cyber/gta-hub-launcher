@@ -6,6 +6,7 @@ import confetti from 'canvas-confetti'; // Assuming confetti is available or we 
 // Wait, I can make a simple confetti burst using the 'canvas-confetti' package if it was installed.
 // Looking at previous context, I don't see 'canvas-confetti' installed in package.json explicitly mentioned, 
 // so I will avoid importing it to prevent errors and simulate a CSS particle explosion instead.
+import { API_BASE_URL } from '../api/config';
 
 const WelcomeGiftModal = ({ isOpen, onClose, userId, characters = [], onClaimSuccess }) => {
     const [step, setStep] = useState('checking'); // checking, closed (found), selecting_char, opening, claimed, none
@@ -16,7 +17,7 @@ const WelcomeGiftModal = ({ isOpen, onClose, userId, characters = [], onClaimSuc
     // Fetch dynamic gift on open
     React.useEffect(() => {
         if (isOpen && userId) {
-            fetch(`http://localhost:3001/api/gifts/welcome-active?userId=${userId}`)
+            fetch(`${API_BASE_URL}/api/gifts/welcome-active?userId=${userId}`)
                 .then(res => res.json())
                 .then(data => {
                     if (data.found && !data.claimed) {
@@ -42,7 +43,7 @@ const WelcomeGiftModal = ({ isOpen, onClose, userId, characters = [], onClaimSuc
         setStep('opening');
         setTimeout(async () => {
             try {
-                const res = await fetch('http://localhost:3001/api/gifts/claim-welcome', {
+                const res = await fetch(`${API_BASE_URL}/api/gifts/claim-welcome`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ userId, characterId })

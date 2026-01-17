@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import CharacterSelector from '../components/CharacterSelector';
 import RegistrationModal from '../components/RegistrationModal';
 import CharacterCreatorModal from '../components/CharacterCreatorModal';
+import { API_BASE_URL } from '../api/config';
 
 // Mock ipcRenderer for web dev
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: { invoke: () => Promise.resolve({}), send: () => { } } };
@@ -249,7 +250,7 @@ const Servers = () => {
         try {
             // 1. Request SSO Token
             // TODO: Use Config
-            const res = await fetch('http://localhost:3001/api/auth/sso-token', {
+            const res = await fetch(`${API_BASE_URL}/api/auth/sso-token`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: userSession.user.id, characterName: char.Nombre_Apellido, characterId: char.ID })
@@ -520,7 +521,7 @@ const Servers = () => {
                         const saved = localStorage.getItem('user_session');
                         if (saved) {
                             const parsed = JSON.parse(saved);
-                            fetch(`http://localhost:3001/api/user/${parsed.user.id}/refresh`)
+                            fetch(`${API_BASE_URL}/api/user/${parsed.user.id}/refresh`)
                                 .then(r => r.json())
                                 .then(fresh => {
                                     setUserSession(fresh);

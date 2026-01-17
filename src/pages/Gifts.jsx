@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Gift, Star, Zap, Award, Check, Plus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import confetti from 'canvas-confetti';
+import { API_BASE_URL } from '../api/config';
 
 const GiftCard = ({ gift, onClaim, onDelete, isAdmin, loading }) => {
     const isMoney = gift.reward_type === 'MONEY';
@@ -284,7 +285,7 @@ const Gifts = () => {
     const fetchGifts = async (userId) => {
         setLoading(true);
         try {
-            const res = await fetch(`http://localhost:3001/api/gifts?userId=${userId}`);
+            const res = await fetch(`${API_BASE_URL}/api/gifts?userId=${userId}`);
             const data = await res.json();
             if (Array.isArray(data)) setGifts(data);
         } catch (e) {
@@ -305,7 +306,7 @@ const Gifts = () => {
         setClaimLoading(giftId);
 
         try {
-            const res = await fetch('http://localhost:3001/api/gifts/claim', {
+            const res = await fetch(`${API_BASE_URL}/api/gifts/claim`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: user.id, giftId, characterId })
@@ -350,7 +351,7 @@ const Gifts = () => {
         if (!confirm(`¿Estás seguro de eliminar "${gift.title}"?`)) return;
 
         try {
-            const res = await fetch(`http://localhost:3001/api/gifts/${gift.id}`, {
+            const res = await fetch(`${API_BASE_URL}/api/gifts/${gift.id}`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: user.id })
@@ -365,7 +366,7 @@ const Gifts = () => {
 
     const handleCreate = async (formData) => {
         try {
-            const res = await fetch('http://localhost:3001/api/gifts/create', {
+            const res = await fetch(`${API_BASE_URL}/api/gifts/create`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...formData, userId: user.id })

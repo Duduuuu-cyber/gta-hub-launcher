@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, User, MapPin, Plus, Sun, Building, Zap } from 'lucide-react';
+import { API_BASE_URL } from '../api/config';
 
 const CharacterCreatorModal = ({ isOpen, onClose, userId, onCreateSuccess }) => {
     const [formData, setFormData] = useState({
@@ -39,7 +40,7 @@ const CharacterCreatorModal = ({ isOpen, onClose, userId, onCreateSuccess }) => 
             // Male (1) -> 299, Female (0) -> 41
             const defaultSkin = formData.sex === 1 ? 299 : 41;
 
-            const res = await fetch('http://localhost:3001/api/characters/create', {
+            const res = await fetch(`${API_BASE_URL}/api/characters/create`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

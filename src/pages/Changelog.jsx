@@ -6,9 +6,19 @@ const Changelog = () => {
     // Example data - normally this would fetch from a JSON
     const [changes] = useState([
         {
-            version: '1.1.0',
+            version: '1.1.1',
             date: '17 Enero 2026',
             isLatest: true,
+            features: [
+                { type: 'improve', text: 'Arquitectura Backend Actualizada: Conexión VPS.' },
+                { type: 'fix', text: 'Solución definitiva a error de conexión en builds.' },
+                { type: 'new', text: 'Configuración dinámica de API (Dev/Prod).' }
+            ]
+        },
+        {
+            version: '1.1.0',
+            date: '17 Enero 2026',
+            isLatest: false,
             features: [
                 { type: 'new', text: 'Inventario Visual en Perfil (Items, Skins, Equipamiento).' },
                 { type: 'improve', text: 'Seguridad Mejorada: Anti-Bruteforce y Subnet Auth.' },

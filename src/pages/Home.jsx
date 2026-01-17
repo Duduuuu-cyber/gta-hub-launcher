@@ -6,6 +6,7 @@ import CharacterSelector from '../components/CharacterSelector';
 import CharacterCreatorModal from '../components/CharacterCreatorModal';
 import WelcomeGiftModal from '../components/WelcomeGiftModal';
 import VideoSpotlight from '../components/VideoSpotlight';
+import { API_BASE_URL } from '../api/config';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: { send: () => { }, on: () => { }, removeListener: () => { }, invoke: () => { } } };
 
@@ -81,7 +82,8 @@ const Home = () => {
           }
 
           // Fetch fresh properties
-          fetch(`http://localhost:3001/api/user/${parsed.user.id}/refresh`)
+          // Fetch fresh properties
+          fetch(`${API_BASE_URL}/api/user/${parsed.user.id}/refresh`)
             .then(r => r.json())
             .then(fresh => {
               if (fresh.success) {
@@ -175,7 +177,7 @@ const Home = () => {
 
     try {
       // 1. Request SSO Token
-      const res = await fetch('http://localhost:3001/api/auth/sso-token', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/sso-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: userSession.user.id, characterName: charName, characterId: charId })
@@ -223,7 +225,7 @@ const Home = () => {
     const saved = localStorage.getItem('user_session');
     if (saved) {
       const parsed = JSON.parse(saved);
-      fetch(`http://localhost:3001/api/user/${parsed.user.id}/refresh`)
+      fetch(`${API_BASE_URL}/api/user/${parsed.user.id}/refresh`)
         .then(r => r.json())
         .then(fresh => {
           if (fresh.success) {

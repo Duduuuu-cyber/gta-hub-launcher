@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { User, Wallet, Briefcase, Clock, Shield, Star, Award, Car, Home, Zap, Settings, UserPlus, FileText, ChevronDown, CheckCircle, Package, Sprout, Axe, Trash2, Truck, Skull, Hammer, LogOut, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getItemInfo } from '../utils/items';
+import { API_BASE_URL } from '../api/config';
 
 const StatRow = ({ label, value, subValue, highlight }) => (
     <div className="flex justify-between items-center py-3 border-b border-white/5 last:border-0 hover:bg-white/5 px-3 rounded-lg transition-colors">
@@ -117,7 +118,7 @@ const Profile = () => {
 
     const fetchFreshData = async (userId) => {
         try {
-            const res = await fetch(`http://localhost:3001/api/user/${userId}/refresh`);
+            const res = await fetch(`${API_BASE_URL}/api/user/${userId}/refresh`);
             if (res.ok) {
                 const freshData = await res.json();
                 if (freshData.success) {
@@ -153,7 +154,7 @@ const Profile = () => {
                     onClick={async () => {
                         if (userData?.id) {
                             try {
-                                await fetch('http://localhost:3001/api/auth/logout', {
+                                await fetch(`${API_BASE_URL}/api/auth/logout`, {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ userId: userData.id })
@@ -178,7 +179,7 @@ const Profile = () => {
         setModalOpen(true);
         setLoadingInfo(true);
         try {
-            const res = await fetch(`http://localhost:3001/api/vehicles/${selectedCharacter.Nombre_Apellido}`);
+            const res = await fetch(`${API_BASE_URL}/api/vehicles/${selectedCharacter.Nombre_Apellido}`);
             if (!res.ok) throw new Error('Error de servidor');
 
             const data = await res.json();
@@ -247,7 +248,7 @@ const Profile = () => {
         setModalOpen(true);
         setLoadingInfo(true);
         try {
-            const res = await fetch(`http://localhost:3001/api/properties/${selectedCharacter.Nombre_Apellido}`);
+            const res = await fetch(`${API_BASE_URL}/api/properties/${selectedCharacter.Nombre_Apellido}`);
             const data = await res.json();
 
             // Helper Component
@@ -461,7 +462,7 @@ const Profile = () => {
                         onClick={async () => {
                             if (userData?.id) {
                                 try {
-                                    await fetch('http://localhost:3001/api/auth/logout', {
+                                    await fetch(`${API_BASE_URL}/api/auth/logout`, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({ userId: userData.id })
@@ -600,7 +601,7 @@ const Profile = () => {
                         onClick={async () => {
                             if (userData?.id) {
                                 try {
-                                    await fetch('http://localhost:3001/api/auth/logout', {
+                                    await fetch(`${API_BASE_URL}/api/auth/logout`, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({ userId: userData.id })

@@ -4,6 +4,7 @@ import { User, Lock, ArrowRight, AlertCircle, Eye, EyeOff, ShieldCheck } from 'l
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import RegistrationModal from '../components/RegistrationModal';
+import { API_BASE_URL } from '../api/config';
 
 const Login = () => {
     const [username, setUsername] = useState('');
@@ -30,7 +31,7 @@ const Login = () => {
         }
 
         try {
-            const res = await fetch('http://localhost:3001/api/auth/login', {
+            const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })
