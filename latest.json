@@ -1,0 +1,11 @@
+{
+  "version": "1.6.6",
+  "notes": "Actualización v1.6.6 - GTASeoul Roleplay Launcher\n- Fix crítico: Conexión directa a servidor con formato IP:PORT correcto para samp.exe\n- Resolución DNS automática (dominio → IPv4 numérica)\n- Avatares de personajes con fallback SVG inline (nunca falla)\n- Guardia de seguridad para VC Radar mod\n- Corrección de botón de búsqueda de actualizaciones",
+  "pub_date": "2026-07-30T18:13:00.000000Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "",
+      "url": "https://github.com/DuduuRP/gtaseoul-launcher/releases/download/v1.6.6/GTASeoul-Setup-1.6.6.exe"
+    }
+  }
+}
